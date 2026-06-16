@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node scripts/hash-password.js \"User@2024\")",
+      "Bash(node server.js)",
+      "Bash(ping -n 3 127.0.0.1)",
+      "Bash(curl -s -o nul -w \"%{http_code}\" http://localhost:3000/)",
+      "Bash(Test-Path *)",
+      "Bash(curl -s -c /tmp/cookie_admin.txt -X POST http://localhost:3000/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"admin\",\"password\":\"Admin@2024\"}')",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s -c /tmp/cookie_user.txt -X POST http://localhost:3000/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"user\",\"password\":\"User@2024\"}')",
+      "Bash(curl -s -b /tmp/cookie_admin.txt -c /tmp/cookie_admin.txt -X POST http://localhost:3000/auth/resend-otp -H 'Content-Type: application/json')",
+      "Bash(node *)",
+      "Bash(pkill -f \"node server.js\")",
+      "Read(//tmp/**)",
+      "Bash(taskkill //F //IM node.exe)",
+      "Read(//c/Windows/Temp/**)",
+      "Bash(curl *)",
+      "Bash(Start-Sleep -Seconds 3)",
+      "Bash(Get-Content \"C:\\\\Users\\\\ADMIN\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--Downloads-northwind-SQLite3-main\\\\9d1c0ab4-832e-4e87-a732-e156e99737d8\\\\tasks\\\\byecrx3fd.output\" -ErrorAction SilentlyContinue)",
+      "Bash(Get-Content \"C:\\\\Users\\\\ADMIN\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--Downloads-northwind-SQLite3-main\\\\8d4ceb07-1d98-4b57-9be7-41eb61245e12\\\\tasks\\\\bn9c33oe0.output\")"
+    ]
+  }
+}

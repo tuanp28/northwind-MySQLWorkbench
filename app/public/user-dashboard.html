@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard – Northwind</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #0a0e1a; --sidebar: #0d1224; --card: rgba(255,255,255,0.04);
+      --border:  rgba(255,255,255,0.08); --accent: #6c63ff; --accent2: #a78bfa;
+      --text:    #e2e8f0; --muted: #64748b;
+      --green:   #34d399; --yellow: #fbbf24; --red: #f87171; --blue: #60a5fa;
+    }
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; min-height:100vh; }
+
+    /* Sidebar */
+    .sidebar { width:240px; min-height:100vh; background:var(--sidebar); border-right:1px solid var(--border); display:flex; flex-direction:column; position:fixed; top:0; left:0; bottom:0; z-index:100; }
+    .sidebar-logo { padding:24px 20px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+    .sidebar-logo .icon { width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg,#10b981,#34d399); display:flex; align-items:center; justify-content:center; font-size:18px; }
+    .sidebar-logo h2 { font-size:15px; font-weight:700; }
+    .sidebar-logo p  { font-size:11px; color:var(--muted); margin-top:1px; }
+    .nav { flex:1; padding:16px 12px; overflow-y:auto; }
+    .nav-label { font-size:10px; font-weight:600; letter-spacing:1px; color:var(--muted); padding:0 8px; margin:16px 0 6px; text-transform:uppercase; }
+    .nav-item { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; font-size:13.5px; font-weight:500; cursor:pointer; color:var(--muted); transition:all 0.15s; margin-bottom:2px; user-select:none; }
+    .nav-item:hover  { background:rgba(255,255,255,0.05); color:var(--text); }
+    .nav-item.active { background:rgba(16,185,129,0.12); color:var(--green); }
+    .nav-item .icon  { font-size:16px; width:20px; text-align:center; }
+    .sidebar-footer { padding:16px 12px; border-top:1px solid var(--border); }
+    .user-info { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; background:rgba(255,255,255,0.04); margin-bottom:10px; }
+    .user-avatar { width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,#10b981,#34d399); display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+    .user-name { font-size:13px; font-weight:600; }
+    .user-role { font-size:10px; margin-top:1px; }
+    .btn-logout { width:100%; padding:9px; border-radius:10px; background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.2); color:var(--red); font-size:13px; font-weight:500; font-family:'Inter',sans-serif; cursor:pointer; transition:all 0.15s; }
+    .btn-logout:hover { background:rgba(248,113,113,0.2); }
+
+    /* Read-only notice */
+    .readonly-notice { display:flex; align-items:center; gap:8px; padding:8px 14px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); border-radius:10px; font-size:12px; color:var(--green); font-weight:500; margin-bottom:16px; }
+
+    /* Main */
+    .main { margin-left:240px; flex:1; display:flex; flex-direction:column; min-height:100vh; }
+    .topbar { padding:18px 28px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; background:rgba(10,14,26,0.8); backdrop-filter:blur(12px); position:sticky; top:0; z-index:50; }
+    .page-title { font-size:20px; font-weight:700; }
+    .page-sub   { font-size:13px; color:var(--muted); margin-top:2px; }
+    .badge-user { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; background:rgba(52,211,153,0.1); border:1px solid rgba(52,211,153,0.25); border-radius:20px; font-size:12px; color:var(--green); font-weight:600; }
+    .content { padding:28px; flex:1; }
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; animation:fadeIn 0.25s ease; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+
+    /* Stats */
+    .stats-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(175px,1fr)); gap:16px; margin-bottom:28px; }
+    .stat-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px; position:relative; overflow:hidden; transition:transform 0.15s, box-shadow 0.15s; }
+    .stat-card:hover { transform:translateY(-2px); box-shadow:0 8px 30px rgba(0,0,0,0.3); }
+    .stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,#10b981,#34d399); }
+    .stat-icon { font-size:24px; margin-bottom:12px; }
+    .stat-value { font-size:28px; font-weight:700; letter-spacing:-1px; }
+    .stat-label { font-size:12px; color:var(--muted); margin-top:4px; font-weight:500; }
+
+    /* Table */
+    .table-card { background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; margin-bottom:24px; }
+    .table-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .table-header h3 { font-size:15px; font-weight:600; }
+    .search-box { padding:8px 14px; background:rgba(255,255,255,0.06); border:1px solid var(--border); border-radius:10px; color:var(--text); font-size:13px; font-family:'Inter',sans-serif; outline:none; width:200px; transition:border-color 0.2s; }
+    .search-box:focus { border-color:var(--green); }
+    .search-box::placeholder { color:var(--muted); }
+    table { width:100%; border-collapse:collapse; }
+    th { padding:11px 14px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.8px; color:var(--muted); text-align:left; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); }
+    td { padding:11px 14px; font-size:13px; border-bottom:1px solid rgba(255,255,255,0.04); }
+    tr:last-child td { border-bottom:none; }
+    tbody tr { transition:background 0.1s; }
+    tbody tr:hover { background:rgba(255,255,255,0.03); }
+    .tag { display:inline-block; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+    .tag-green { background:rgba(52,211,153,0.12); color:var(--green); }
+    .tag-red   { background:rgba(248,113,113,0.12); color:var(--red); }
+    .tag-mask  { background:rgba(100,116,139,0.15); color:var(--muted); font-family:monospace; }
+    .table-footer { padding:12px 20px; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; font-size:12px; color:var(--muted); }
+    .pager { display:flex; gap:6px; }
+    .pager-btn { padding:5px 12px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--text); font-size:12px; cursor:pointer; font-family:'Inter',sans-serif; transition:all 0.15s; }
+    .pager-btn:hover:not(:disabled) { background:rgba(255,255,255,0.06); }
+    .pager-btn:disabled { opacity:0.3; cursor:not-allowed; }
+    .loading-row td { text-align:center; padding:40px; color:var(--muted); }
+
+    /* Theme toggle button */
+    .theme-btn { padding:6px 11px; border-radius:10px; background:rgba(255,255,255,0.06); border:1px solid var(--border); color:var(--text); font-size:16px; cursor:pointer; transition:all 0.15s; line-height:1; }
+    .theme-btn:hover { background:rgba(255,255,255,0.12); }
+
+    /* Smooth theme transition */
+    body, .sidebar, .main, .topbar, .stat-card, .table-card, .nav-item, .user-info, th, td, .search-box, .pager-btn, .btn-logout { transition: background-color 0.25s, border-color 0.25s, color 0.25s, box-shadow 0.25s; }
+
+    /* Light theme */
+    [data-theme="light"] { --bg:#f1f5f9; --sidebar:#ffffff; --card:rgba(0,0,0,0.03); --border:rgba(0,0,0,0.09); --text:#1e293b; --muted:#64748b; }
+    [data-theme="light"] .sidebar    { box-shadow:2px 0 12px rgba(0,0,0,0.08); }
+    [data-theme="light"] .topbar     { background:rgba(241,245,249,0.92); }
+    [data-theme="light"] th          { background:rgba(0,0,0,0.025); }
+    [data-theme="light"] tbody tr:hover { background:rgba(0,0,0,0.025); }
+    [data-theme="light"] td          { border-bottom-color:rgba(0,0,0,0.05); }
+    [data-theme="light"] .nav-item:hover  { background:rgba(0,0,0,0.05); }
+    [data-theme="light"] .nav-item.active { background:rgba(16,185,129,0.1); }
+    [data-theme="light"] .user-info  { background:rgba(0,0,0,0.04); }
+    [data-theme="light"] .search-box { background:rgba(0,0,0,0.05); border-color:rgba(0,0,0,0.1); color:var(--text); }
+    [data-theme="light"] .stat-card  { box-shadow:0 2px 10px rgba(0,0,0,0.07); }
+    [data-theme="light"] .pager-btn  { border-color:rgba(0,0,0,0.1); }
+    [data-theme="light"] .theme-btn  { background:rgba(0,0,0,0.05); }
+    [data-theme="light"] .theme-btn:hover { background:rgba(0,0,0,0.1); }
+    [data-theme="light"] code        { color:#7c3aed; }
+    [data-theme="light"] .tag-mask   { background:rgba(0,0,0,0.06); }
+  </style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="icon">🧭</div>
+    <div><h2>Northwind</h2><p>Database Portal</p></div>
+  </div>
+  <nav class="nav">
+    <div class="nav-label">Menu</div>
+    <div class="nav-item active" onclick="switchTab('overview',this)"><span class="icon">📊</span> Tổng Quan</div>
+    <div class="nav-label">Dữ Liệu</div>
+    <div class="nav-item" onclick="switchTab('customers',this)"><span class="icon">👥</span> Khách Hàng</div>
+    <div class="nav-item" onclick="switchTab('orders',this)"><span class="icon">📦</span> Đơn Hàng</div>
+    <div class="nav-item" onclick="switchTab('products',this)"><span class="icon">🏷️</span> Sản Phẩm</div>
+    <div class="nav-item" onclick="switchTab('employees',this)"><span class="icon">🧑‍💼</span> Nhân Viên</div>
+    <div class="nav-item" onclick="switchTab('suppliers',this)"><span class="icon">🏭</span> Nhà Cung Cấp</div>
+    <div class="nav-item" onclick="switchTab('categories',this)"><span class="icon">🗂️</span> Danh Mục</div>
+    <div class="nav-item" onclick="switchTab('shippers',this)"><span class="icon">🚚</span> Vận Chuyển</div>
+    <div class="nav-item" onclick="switchTab('regions',this)"><span class="icon">🗺️</span> Vùng & Khu Vực</div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="user-info">
+      <div class="user-avatar">👤</div>
+      <div>
+        <div class="user-name" id="sidebar-username">…</div>
+        <div class="user-role" style="color:var(--muted)">Database Portal</div>
+      </div>
+    </div>
+    <form action="/auth/logout" method="POST">
+      <button type="submit" class="btn-logout">🚨 Đăng Xuất</button>
+    </form>
+  </div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="page-title" id="page-title">Tổng Quan</div>
+      <div class="page-sub">Northwind Business Intelligence</div>
+    </div>
+    <div><button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Chuyển sáng/tối">🌙</button></div>
+  </div>
+  <div class="content">
+
+    <!-- Overview -->
+    <div class="tab-panel active" id="tab-overview">
+<div class="stats-grid" id="stats-grid">
+        <div class="stat-card"><div class="stat-icon">⏳</div><div class="stat-value">—</div><div class="stat-label">Đang tải…</div></div>
+      </div>
+      <div class="table-card">
+        <div class="table-header"><h3>🏆 Doanh Thu Theo Danh Mục</h3></div>
+        <table><thead><tr><th>#</th><th>Danh Mục</th><th>Doanh Thu (USD)</th><th>Số Đơn</th></tr></thead>
+        <tbody id="sales-body"><tr class="loading-row"><td colspan="4">Đang tải…</td></tr></tbody></table>
+      </div>
+    </div>
+
+    <!-- Customers -->
+    <div class="tab-panel" id="tab-customers">
+      <div class="table-card">
+        <div class="table-header">
+          <h3>👥 Khách Hàng</h3>
+          <input class="search-box" id="search-customers" placeholder="🔍 Tìm kiếm…" oninput="debounce(()=>loadCustomers(1),400)()" />
+        </div>
+        <table><thead><tr><th>ID</th><th>Công Ty</th><th>Liên Hệ</th><th>Thành Phố</th><th>Quốc Gia</th><th>Điện Thoại</th></tr></thead>
+        <tbody id="customers-body"><tr class="loading-row"><td colspan="6">Đang tải…</td></tr></tbody></table>
+        <div class="table-footer">
+          <span id="customers-info"></span>
+          <div class="pager">
+            <button class="pager-btn" id="cust-prev" onclick="loadCustomers(custPage-1)">← Trước</button>
+            <button class="pager-btn" id="cust-next" onclick="loadCustomers(custPage+1)">Sau →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Orders -->
+    <div class="tab-panel" id="tab-orders">
+      <div class="table-card">
+        <div class="table-header"><h3>📦 Đơn Hàng</h3></div>
+        <table><thead><tr><th>OrderID</th><th>Khách Hàng</th><th>Nhân Viên</th><th>Ngày Đặt</th><th>Ngày Giao</th><th>Vận Chuyển</th><th>Quốc Gia</th></tr></thead>
+        <tbody id="orders-body"><tr class="loading-row"><td colspan="7">Đang tải…</td></tr></tbody></table>
+        <div class="table-footer">
+          <span id="orders-info"></span>
+          <div class="pager">
+            <button class="pager-btn" id="ord-prev" onclick="loadOrders(ordPage-1)">← Trước</button>
+            <button class="pager-btn" id="ord-next" onclick="loadOrders(ordPage+1)">Sau →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Products -->
+    <div class="tab-panel" id="tab-products">
+      <div class="table-card">
+        <div class="table-header">
+          <h3>🏷️ Sản Phẩm</h3>
+          <input class="search-box" id="search-products" placeholder="🔍 Tìm kiếm…" oninput="debounce(()=>loadProducts(1),400)()" />
+        </div>
+        <table><thead><tr><th>ID</th><th>Sản Phẩm</th><th>Danh Mục</th><th>Nhà Cung Cấp</th><th>Đơn Giá</th><th>Tồn Kho</th><th>Trạng Thái</th></tr></thead>
+        <tbody id="products-body"><tr class="loading-row"><td colspan="7">Đang tải…</td></tr></tbody></table>
+        <div class="table-footer">
+          <span id="products-info"></span>
+          <div class="pager">
+            <button class="pager-btn" id="prod-prev" onclick="loadProducts(prodPage-1)">← Trước</button>
+            <button class="pager-btn" id="prod-next" onclick="loadProducts(prodPage+1)">Sau →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Employees -->
+    <div class="tab-panel" id="tab-employees">
+      <div class="table-card">
+        <div class="table-header"><h3>🧑‍💼 Nhân Viên</h3></div>
+        <table><thead><tr><th>ID</th><th>Họ Tên</th><th>Chức Vụ</th><th>Thành Phố</th><th>Quốc Gia</th><th>Điện Thoại</th><th>Ngày Vào</th><th>Quản Lý</th></tr></thead>
+        <tbody id="employees-body"><tr class="loading-row"><td colspan="8">Đang tải…</td></tr></tbody></table>
+        <div class="table-footer">
+          <span id="employees-info"></span>
+          <div class="pager">
+            <button class="pager-btn" id="emp-prev" onclick="loadEmployees(empPage-1)">← Trước</button>
+            <button class="pager-btn" id="emp-next" onclick="loadEmployees(empPage+1)">Sau →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Suppliers -->
+    <div class="tab-panel" id="tab-suppliers">
+      <div class="table-card">
+        <div class="table-header"><h3>🏭 Nhà Cung Cấp</h3></div>
+        <table><thead><tr><th>ID</th><th>Công Ty</th><th>Liên Hệ</th><th>Chức Vụ</th><th>Thành Phố</th><th>Quốc Gia</th><th>Điện Thoại</th></tr></thead>
+        <tbody id="suppliers-body"><tr class="loading-row"><td colspan="7">Đang tải…</td></tr></tbody></table>
+        <div class="table-footer">
+          <span id="suppliers-info"></span>
+          <div class="pager">
+            <button class="pager-btn" id="sup-prev" onclick="loadSuppliers(supPage-1)">← Trước</button>
+            <button class="pager-btn" id="sup-next" onclick="loadSuppliers(supPage+1)">Sau →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Categories -->
+    <div class="tab-panel" id="tab-categories">
+      <div class="table-card">
+        <div class="table-header"><h3>🗂️ Danh Mục Sản Phẩm</h3></div>
+        <table><thead><tr><th>ID</th><th>Danh Mục</th><th>Mô Tả</th><th>Số SP</th></tr></thead>
+        <tbody id="categories-body"><tr class="loading-row"><td colspan="4">Đang tải…</td></tr></tbody></table>
+      </div>
+    </div>
+
+    <!-- Shippers -->
+    <div class="tab-panel" id="tab-shippers">
+      <div class="table-card">
+        <div class="table-header"><h3>🚚 Đơn Vị Vận Chuyển</h3></div>
+        <table><thead><tr><th>ID</th><th>Công Ty</th><th>Điện Thoại</th><th>Tổng Đơn</th></tr></thead>
+        <tbody id="shippers-body"><tr class="loading-row"><td colspan="4">Đang tải…</td></tr></tbody></table>
+      </div>
+    </div>
+
+    <!-- Regions -->
+    <div class="tab-panel" id="tab-regions">
+      <div class="table-card">
+        <div class="table-header"><h3>🗺️ Vùng & Khu Vực</h3></div>
+        <table><thead><tr><th>ID</th><th>Vùng</th><th>Số Khu Vực</th></tr></thead>
+        <tbody id="regions-body"><tr class="loading-row"><td colspan="3">Đang tải…</td></tr></tbody></table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let custPage=1, ordPage=1, prodPage=1, empPage=1, supPage=1;
+const LIMIT = 15;
+const fmt      = n => n?.toLocaleString('vi-VN') ?? '—';
+const fmtDate  = d => d ? d.split('T')[0] : '—';
+const fmtMoney = n => n != null ? '$' + Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
+
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(()=>fn(...a), ms); }; }
+
+function switchTab(tab, el) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  el.classList.add('active');
+  const titles = { overview:'Tổng Quan', customers:'Khách Hàng', orders:'Đơn Hàng', products:'Sản Phẩm', employees:'Nhân Viên', suppliers:'Nhà Cung Cấp', categories:'Danh Mục', shippers:'Vận Chuyển', regions:'Vùng & Khu Vực' };
+  document.getElementById('page-title').textContent = titles[tab] || tab;
+  if (tab==='customers' && custPage===1) loadCustomers(1);
+  if (tab==='orders'    && ordPage===1)  loadOrders(1);
+  if (tab==='products'  && prodPage===1) loadProducts(1);
+  if (tab==='employees' && empPage===1)  loadEmployees(1);
+  if (tab==='suppliers' && supPage===1)  loadSuppliers(1);
+  if (tab==='categories') loadCategories();
+  if (tab==='shippers')   loadShippers();
+  if (tab==='regions')    loadRegions();
+}
+
+fetch('/api/me').then(r=>r.json()).then(d => {
+  document.getElementById('sidebar-username').textContent = d.username || 'user';
+  if (d.role === 'admin') window.location.href = '/dashboard';
+}).catch(() => { window.location.href = '/'; });
+
+const STAT_DEF = [
+  {key:'customers',  icon:'👥',  label:'Khách Hàng',   tab:'customers'},
+  {key:'orders',     icon:'📦',  label:'Đơn Hàng',     tab:'orders'},
+  {key:'products',   icon:'🏷️', label:'Sản Phẩm',     tab:'products'},
+  {key:'employees',  icon:'🧑‍💼',label:'Nhân Viên',    tab:'employees'},
+  {key:'suppliers',  icon:'🏭',  label:'Nhà Cung Cấp', tab:'suppliers'},
+  {key:'categories', icon:'🗂️', label:'Danh Mục',     tab:'categories'},
+  {key:'shippers',   icon:'🚚',  label:'Vận Chuyển',   tab:'shippers'},
+  {key:'territories',icon:'🗺️', label:'Khu Vực',      tab:'regions'},
+];
+fetch('/api/stats').then(r=>r.json()).then(data => {
+  document.getElementById('stats-grid').innerHTML = STAT_DEF.map(s => `
+    <div class="stat-card" style="cursor:pointer" onclick="switchTab('${s.tab}',document.querySelector('.nav-item[onclick*=\\'${s.tab}\\']'))">
+      <div class="stat-icon">${s.icon}</div>
+      <div class="stat-value">${fmt(data[s.key])}</div>
+      <div class="stat-label">${s.label}</div>
+    </div>`).join('');
+});
+fetch('/api/sales-by-category').then(r=>r.json()).then(rows => {
+  document.getElementById('sales-body').innerHTML = rows.map((r,i) => `
+    <tr><td style="color:var(--muted)">${i+1}</td><td><strong>${r.CategoryName}</strong></td>
+    <td style="color:var(--green);font-weight:600">${fmtMoney(r.Revenue)}</td><td>${fmt(r.Orders)}</td></tr>`).join('');
+});
+
+function maskedCell(phone) {
+  return `<span class="tag tag-mask">${phone || '—'}</span>`;
+}
+
+async function loadCustomers(page) {
+  if (page < 1) return; custPage = page;
+  const q = document.getElementById('search-customers').value;
+  const r = await fetch(`/api/customers?page=${page}&limit=${LIMIT}&search=${encodeURIComponent(q)}`);
+  const d = await r.json();
+  const totalPages = Math.ceil(d.total / LIMIT) || 1;
+  document.getElementById('customers-body').innerHTML = d.data.map(c => `
+    <tr>
+      <td><code style="color:var(--accent2)">${c.CustomerID}</code></td>
+      <td><strong>${c.CompanyName}</strong></td>
+      <td>${c.ContactName||'—'}</td><td>${c.City||'—'}</td><td>${c.Country||'—'}</td>
+      <td>${maskedCell(c.Phone)}</td>
+    </tr>`).join('');
+  document.getElementById('customers-info').textContent = `Trang ${page}/${totalPages} — ${fmt(d.total)} khách hàng`;
+  document.getElementById('cust-prev').disabled = page <= 1;
+  document.getElementById('cust-next').disabled = page >= totalPages;
+}
+
+async function loadOrders(page) {
+  if (page < 1) return; ordPage = page;
+  const r = await fetch(`/api/orders?page=${page}&limit=${LIMIT}`);
+  const d = await r.json();
+  const totalPages = Math.ceil(d.total / LIMIT) || 1;
+  document.getElementById('orders-body').innerHTML = d.data.map(o => `
+    <tr>
+      <td><code style="color:var(--accent2)">#${o.OrderID}</code></td>
+      <td>${o.Customer||'—'}</td><td>${o.Employee||'—'}</td>
+      <td>${fmtDate(o.OrderDate)}</td><td>${fmtDate(o.ShippedDate)}</td>
+      <td style="color:var(--green)">${fmtMoney(o.Freight)}</td><td>${o.ShipCountry||'—'}</td>
+    </tr>`).join('');
+  document.getElementById('orders-info').textContent = `Trang ${page}/${totalPages} — ${fmt(d.total)} đơn hàng`;
+  document.getElementById('ord-prev').disabled = page <= 1;
+  document.getElementById('ord-next').disabled = page >= totalPages;
+}
+
+async function loadProducts(page) {
+  if (page < 1) return; prodPage = page;
+  const q = document.getElementById('search-products').value;
+  const r = await fetch(`/api/products?page=${page}&limit=${LIMIT}&search=${encodeURIComponent(q)}`);
+  const d = await r.json();
+  const totalPages = Math.ceil(d.total / LIMIT) || 1;
+  document.getElementById('products-body').innerHTML = d.data.map(p => `
+    <tr>
+      <td style="color:var(--muted)">${p.ProductID}</td><td><strong>${p.ProductName}</strong></td>
+      <td>${p.CategoryName||'—'}</td><td>${p.Supplier||'—'}</td>
+      <td style="color:var(--yellow)">${fmtMoney(p.UnitPrice)}</td>
+      <td>${fmt(p.UnitsInStock)}</td>
+      <td><span class="tag ${p.Discontinued==='1'||p.Discontinued===1?'tag-red':'tag-green'}">${p.Discontinued==='1'||p.Discontinued===1?'Ngừng bán':'Đang bán'}</span></td>
+    </tr>`).join('');
+  document.getElementById('products-info').textContent = `Trang ${page}/${totalPages} — ${fmt(d.total)} sản phẩm`;
+  document.getElementById('prod-prev').disabled = page <= 1;
+  document.getElementById('prod-next').disabled = page >= totalPages;
+}
+
+async function loadEmployees(page) {
+  if (page < 1) return; empPage = page;
+  const r = await fetch(`/api/employees?page=${page}&limit=${LIMIT}`);
+  const d = await r.json();
+  const totalPages = Math.ceil(d.total / LIMIT) || 1;
+  document.getElementById('employees-body').innerHTML = d.data.map(e => `
+    <tr>
+      <td style="color:var(--muted)">${e.EmployeeID}</td><td><strong>${e.FullName||'—'}</strong></td>
+      <td>${e.Title||'—'}</td><td>${e.City||'—'}</td><td>${e.Country||'—'}</td>
+      <td>${maskedCell(e.HomePhone)}</td>
+      <td>${fmtDate(e.HireDate)}</td><td style="color:var(--accent2)">${e.Manager||'—'}</td>
+    </tr>`).join('');
+  document.getElementById('employees-info').textContent = `Trang ${page}/${totalPages} — ${fmt(d.total)} nhân viên`;
+  document.getElementById('emp-prev').disabled = page <= 1;
+  document.getElementById('emp-next').disabled = page >= totalPages;
+}
+
+async function loadSuppliers(page) {
+  if (page < 1) return; supPage = page;
+  const r = await fetch(`/api/suppliers?page=${page}&limit=${LIMIT}`);
+  const d = await r.json();
+  const totalPages = Math.ceil(d.total / LIMIT) || 1;
+  document.getElementById('suppliers-body').innerHTML = d.data.map(s => `
+    <tr>
+      <td style="color:var(--muted)">${s.SupplierID}</td><td><strong>${s.CompanyName||'—'}</strong></td>
+      <td>${s.ContactName||'—'}</td><td>${s.ContactTitle||'—'}</td>
+      <td>${s.City||'—'}</td><td>${s.Country||'—'}</td>
+      <td>${maskedCell(s.Phone)}</td>
+    </tr>`).join('');
+  document.getElementById('suppliers-info').textContent = `Trang ${page}/${totalPages} — ${fmt(d.total)} nhà cung cấp`;
+  document.getElementById('sup-prev').disabled = page <= 1;
+  document.getElementById('sup-next').disabled = page >= totalPages;
+}
+
+async function loadCategories() {
+  const r = await fetch('/api/categories'); const d = await r.json();
+  document.getElementById('categories-body').innerHTML = d.data.map(c => `
+    <tr><td style="color:var(--muted)">${c.CategoryID}</td><td><strong>${c.CategoryName||'—'}</strong></td>
+    <td style="color:var(--muted);font-size:12px">${c.Description||'—'}</td>
+    <td><span class="tag tag-green">${fmt(c.ProductCount)} SP</span></td></tr>`).join('');
+}
+
+async function loadShippers() {
+  const r = await fetch('/api/shippers'); const d = await r.json();
+  document.getElementById('shippers-body').innerHTML = d.data.map(s => `
+    <tr><td style="color:var(--muted)">${s.ShipperID}</td><td><strong>${s.CompanyName||'—'}</strong></td>
+    <td style="color:var(--muted)">${s.Phone||'—'}</td>
+    <td><span class="tag tag-green">${fmt(s.TotalOrders)} đơn</span></td></tr>`).join('');
+}
+
+async function loadRegions() {
+  const r = await fetch('/api/regions'); const d = await r.json();
+  document.getElementById('regions-body').innerHTML = d.data.map(r => `
+    <tr><td style="color:var(--muted)">${r.RegionID}</td><td><strong>${r.RegionDescription||'—'}</strong></td>
+    <td><span class="tag tag-green">${fmt(r.TerritoryCount)} khu vực</span></td></tr>`).join('');
+}
+
+// ── Theme toggle ──────────────────────────────────────────────────────────
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('theme-btn').textContent = theme === 'dark' ? '🌙' : '☀️';
+}
+function toggleTheme() {
+  const next = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('nw-theme', next);
+  applyTheme(next);
+}
+applyTheme(localStorage.getItem('nw-theme') || 'dark');
+</script>
+</body>
+</html>

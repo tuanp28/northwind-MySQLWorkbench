@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard – Northwind</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #0a0e1a; --sidebar: #0d1224; --card: rgba(255,255,255,0.04);
+      --border:  rgba(255,255,255,0.08); --accent: #6c63ff; --accent2: #a78bfa;
+      --text:    #e2e8f0; --muted: #64748b;
+      --green:   #34d399; --yellow: #fbbf24; --red: #f87171; --blue: #60a5fa;
+    }
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; min-height:100vh; }
+
+    /* Sidebar */
+    .sidebar { width:240px; min-height:100vh; background:var(--sidebar); border-right:1px solid var(--border); display:flex; flex-direction:column; position:fixed; top:0; left:0; bottom:0; z-index:100; }
+    .sidebar-logo { padding:24px 20px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+    .sidebar-logo .icon { width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg,var(--accent),var(--accent2)); display:flex; align-items:center; justify-content:center; font-size:18px; }
+    .sidebar-logo h2 { font-size:15px; font-weight:700; }
+    .sidebar-logo p  { font-size:11px; color:var(--muted); margin-top:1px; }
+    .nav { flex:1; padding:16px 12px; overflow-y:auto; }
+    .nav-label { font-size:10px; font-weight:600; letter-spacing:1px; color:var(--muted); padding:0 8px; margin:16px 0 6px; text-transform:uppercase; }
+    .nav-item { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; font-size:13.5px; font-weight:500; cursor:pointer; color:var(--muted); transition:all 0.15s; margin-bottom:2px; user-select:none; }
+    .nav-item:hover  { background:rgba(255,255,255,0.05); color:var(--text); }
+    .nav-item.active { background:rgba(108,99,255,0.15); color:var(--accent2); }
+    .nav-item .icon  { font-size:16px; width:20px; text-align:center; }
+    .sidebar-footer { padding:16px 12px; border-top:1px solid var(--border); }
+    .user-info { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; background:rgba(255,255,255,0.04); margin-bottom:10px; cursor:pointer; transition:background 0.15s; }
+    .user-info:hover { background:rgba(255,255,255,0.07); }
+    .user-avatar { width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--accent2)); display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; overflow:hidden; }
+    .user-avatar img { width:32px; height:32px; border-radius:50%; object-fit:cover; }
+    .user-name { font-size:13px; font-weight:600; }
+    .user-role { font-size:10px; margin-top:1px; }
+    .btn-logout { width:100%; padding:9px; border-radius:10px; background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.2); color:var(--red); font-size:13px; font-weight:500; font-family:'Inter',sans-serif; cursor:pointer; transition:all 0.15s; }
+    .btn-logout:hover { background:rgba(248,113,113,0.2); }
+
+    /* Modals */
+    .modal-overlay { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.75); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:#0d1224; border:1px solid rgba(255,255,255,0.1); border-radius:20px; padding:28px; width:100%; max-width:560px; max-height:90vh; overflow-y:auto; animation:slideUp 0.25s ease; }
+    @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    .modal-title { font-size:17px; font-weight:700; margin-bottom:20px; display:flex; align-items:center; gap:10px; }
+    .modal-close { margin-left:auto; background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; padding:2px 8px; border-radius:8px; }
+    .modal-close:hover { background:rgba(255,255,255,0.06); color:var(--text); }
+    .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .form-grid .full { grid-column:1/-1; }
+    .form-group label { display:block; font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:6px; }
+    .form-input { width:100%; padding:10px 12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); border-radius:10px; color:var(--text); font-size:13.5px; font-family:'Inter',sans-serif; outline:none; transition:border-color 0.2s; }
+    .form-input:focus { border-color:var(--accent); }
+    .form-input::placeholder { color:var(--muted); }
+    .form-select { appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%2364748b' d='M4 6l4 4 4-4'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 10px center; background-size:16px; }
+    .modal-actions { display:flex; gap:10px; margin-top:20px; justify-content:flex-end; }
+    .btn-save { padding:10px 22px; border-radius:10px; background:linear-gradient(135deg,var(--accent),#8b5cf6); border:none; color:#fff; font-size:13px; font-weight:600; font-family:'Inter',sans-serif; cursor:pointer; transition:opacity 0.15s; }
+    .btn-save:hover { opacity:0.9; }
+    .btn-save:disabled { opacity:0.5; cursor:not-allowed; }
+    .btn-cancel { padding:10px 18px; border-radius:10px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); color:var(--muted); font-size:13px; font-weight:500; font-family:'Inter',sans-serif; cursor:pointer; transition:all 0.15s; }
+    .btn-cancel:hover { background:rgba(255,255,255,0.1); color:var(--text); }
+    .modal-alert { padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:14px; font-weight:500; display:none; }
+    .modal-alert.ok  { background:rgba(52,211,153,0.12); border:1px solid rgba(52,211,153,0.3); color:var(--green); }
+    .modal-alert.err { background:rgba(248,113,113,0.12); border:1px solid rgba(248,113,113,0.3); color:var(--red); }
+
+    /* Confirm delete modal */
+    .confirm-modal { max-width:400px; text-align:center; }
+    .confirm-icon { font-size:48px; margin-bottom:12px; }
+    .confirm-text { font-size:15px; margin-bottom:6px; }
+    .confirm-sub  { font-size:13px; color:var(--muted); margin-bottom:20px; }
+    .btn-danger { padding:10px 22px; border-radius:10px; background:rgba(248,113,113,0.2); border:1px solid rgba(248,113,113,0.4); color:var(--red); font-size:13px; font-weight:600; font-family:'Inter',sans-serif; cursor:pointer; transition:all 0.15s; }
+    .btn-danger:hover { background:rgba(248,113,113,0.35); }
+
+    /* Profile modal */
+    .modal-section { margin-bottom:22px; padding-bottom:22px; border-bottom:1px solid rgba(255,255,255,0.06); }
+    .modal-section:last-child { margin-bottom:0; padding-bottom:0; border-bottom:none; }
+    .modal-section h4 { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:12px; }
+    .avatar-upload-label { display:inline-block; padding:8px 14px; border-radius:8px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); font-size:13px; cursor:pointer; transition:all 0.15s; margin-bottom:8px; }
+    .avatar-upload-label:hover { background:rgba(255,255,255,0.1); }
+    .btn-primary { padding:9px 18px; border-radius:10px; background:linear-gradient(135deg,var(--accent),#8b5cf6); border:none; color:#fff; font-size:13px; font-weight:600; font-family:'Inter',sans-serif; cursor:pointer; }
+    .btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
+
+    /* Main */
+    .main { margin-left:240px; flex:1; display:flex; flex-direction:column; min-height:100vh; }
+    .topbar { padding:18px 28px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; background:rgba(10,14,26,0.8); backdrop-filter:blur(12px); position:sticky; top:0; z-index:50; }
+    .page-title { font-size:20px; font-weight:700; }
+    .page-sub   { font-size:13px; color:var(--muted); margin-top:2px; }
+    .badge-admin { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.25); border-radius:20px; font-size:12px; color:var(--red); font-weight:600; }
+    .content { padding:28px; flex:1; }
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; animation:fadeIn 0.25s ease; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+
+    /* Stats */
+    .stats-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(175px,1fr)); gap:16px; margin-bottom:28px; }
+    .stat-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px; position:relative; overflow:hidden; transition:transform 0.15s, box-shadow 0.15s; }
+    .stat-card:hover { transform:translateY(-2px); box-shadow:0 8px 30px rgba(0,0,0,0.3); }
+    .stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(--accent),var(--accent2)); }
+    .stat-icon { font-size:24px; margin-bottom:12px; }
+    .stat-value { font-size:28px; font-weight:700; letter-spacing:-1px; }
+    .stat-label { font-size:12px; color:var(--muted); margin-top:4px; font-weight:500; }
+
+    /* Table */
+    .table-card { background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; margin-bottom:24px; }
+    .table-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .table-header h3 { font-size:15px; font-weight:600; }
+    .search-box { padding:8px 14px; background:rgba(255,255,255,0.06); border:1px solid var(--border); border-radius:10px; color:var(--text); font-size:13px; font-family:'Inter',sans-serif; outline:none; width:200px; transition:border-color 0.2s; }
+    .search-box:focus { border-color:var(--accent); }
+    .search-box::placeholder { color:var(--muted); }
+    table { width:100%; border-collapse:collapse; }
+    th { padding:11px 14px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.8px; color:var(--muted); text-align:left; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); }
+    td { padding:11px 14px; font-size:13px; border-bottom:1px solid rgba(255,255,255,0.04); }
+    tr:last-child td { border-bottom:none; }
+    tbody tr { transition:background 0.1s; }
+    tbody tr:hover { background:rgba(255,255,255,0.03); }
+    .tag { display:inline-block; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+    .tag-green { background:rgba(52,211,153,0.12); color:var(--green); }
+    .tag-red   { background:rgba(248,113,113,0.12); color:var(--red); }
+    .table-footer { padding:12px 20px; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; font-size:12px; color:var(--muted); }
+    .pager { display:flex; gap:6px; }
+    .pager-btn { padding:5px 12px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--text); font-size:12px; cursor:pointer; font-family:'Inter',sans-serif; transition:all 0.15s; }
+    .pager-btn:hover:not(:disabled) { background:rgba(255,255,255,0.06); }
+    .pager-btn:disabled { opacity:0.3; cursor:not-allowed; }
+    .loading-row td { text-align:center; padding:40px; color:var(--muted); }
+
+    /* Action buttons */
+    .act-btn { padding:4px 10px; border-radius:7px; border:none; font-size:11px; font-weight:600; cursor:pointer; font-family:'Inter',sans-serif; transition:all 0.15s; }
+    .act-edit   { background:rgba(108,99,255,0.15); color:var(--accent2); margin-right:4px; }
+    .act-edit:hover   { background:rgba(108,99,255,0.3); }
+    .act-delete { background:rgba(248,113,113,0.12); color:var(--red); }
+    .act-delete:hover { background:rgba(248,113,113,0.25); }
+    .act-del-only { background:rgba(248,113,113,0.12); color:var(--red); }
+    .act-del-only:hover { background:rgba(248,113,113,0.25); }
+
+    /* Theme toggle button */
+    .theme-btn { padding:6px 11px; border-radius:10px; background:rgba(255,255,255,0.06); border:1px solid var(--border); color:var(--text); font-size:16px; cursor:pointer; transition:all 0.15s; line-height:1; }
+    .theme-btn:hover { background:rgba(255,255,255,0.12); }
+
+    /* Smooth theme transition */
+    body, .sidebar, .main, .topbar, .modal, .stat-card, .table-card, .nav-item, .user-info, th, td, .form-input, .search-box, .modal-input, .pager-btn, .btn-logout, .btn-save, .btn-cancel, .btn-danger, .act-btn { transition: background-color 0.25s, border-color 0.25s, color 0.25s, box-shadow 0.25s; }
+
+    /* Light theme */
+    [data-theme="light"] { --bg:#f1f5f9; --sidebar:#ffffff; --card:rgba(0,0,0,0.03); --border:rgba(0,0,0,0.09); --text:#1e293b; --muted:#64748b; }
+    [data-theme="light"] .sidebar    { box-shadow:2px 0 12px rgba(0,0,0,0.08); }
+    [data-theme="light"] .topbar     { background:rgba(241,245,249,0.92); }
+    [data-theme="light"] th          { background:rgba(0,0,0,0.025); }
+    [data-theme="light"] tbody tr:hover { background:rgba(0,0,0,0.025); }
+    [data-theme="light"] td          { border-bottom-color:rgba(0,0,0,0.05); }
+    [data-theme="light"] .nav-item:hover  { background:rgba(0,0,0,0.05); }
+    [data-theme="light"] .nav-item.active { background:rgba(108,99,255,0.12); }
+    [data-theme="light"] .user-info  { background:rgba(0,0,0,0.04); }
+    [data-theme="light"] .search-box,
+    [data-theme="light"] .form-input { background:rgba(0,0,0,0.05); border-color:rgba(0,0,0,0.1); color:var(--text); }
+    [data-theme="light"] .modal      { background:#f8fafc; border-color:rgba(0,0,0,0.1); }
+    [data-theme="light"] .modal-overlay { background:rgba(0,0,0,0.4); }
+    [data-theme="light"] .stat-card  { box-shadow:0 2px 10px rgba(0,0,0,0.07); }
+    [data-theme="light"] .pager-btn  { border-color:rgba(0,0,0,0.1); }
+    [data-theme="light"] .theme-btn  { background:rgba(0,0,0,0.05); }
+    [data-theme="light"] .theme-btn:hover { background:rgba(0,0,0,0.1); }
+    [data-theme="light"] code        { color:#7c3aed; }
+  </style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="icon">🧭</div>
+    <div><h2>Northwind</h2><p>Admin Panel</p></div>
+  </div>
+  <nav class="nav">
+    <div class="nav-label">Menu</div>
+    <div class="nav-item active" onclick="switchTab('overview',this)"><span class="icon">📊</span> Tổng Quan</div>
+    <div class="nav-label">Quản Lý</div>
+    <div class="nav-item" onclick="switchTab('customers',this)"><span class="icon">👥</span> Khách Hàng</div>
+    <div class="nav-item" onclick="switchTab('orders',this)"><span class="icon">📦</span> Đơn Hàng</div>
+    <div class="nav-item" onclick="switchTab('products',this)"><span class="icon">🏷️</span> Sản Phẩm</div>
+    <div class="nav-item" onclick="switchTab('employees',this)"><span class="icon">🧑‍💼</span> Nhân Viên</div>
+    <div class="nav-item" onclick="switchTab('suppliers',this)"><span class="icon">🏭</span> Nhà Cung Cấp</div>
+    <div class="nav-label">Danh Mục</div>
+    <div class="nav-item" onclick="switchTab('categories',this)"><span class="icon">🗂️</span> Danh Mục</div>
+    <div class="nav-item" onclick="switchTab('shippers',this)"><span class="icon">🚚</span> Vận Chuyển</div>
+    <div class="nav-item" onclick="switchTab('regions',this)"><span class="icon">🗺️</span> Vùng & Khu Vực</div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="user-info" onclick="openProfileModal()">
+      <div class="user-avatar" id="sidebar-avatar-wrap"><span id="sidebar-avatar-emoji">👑</span></div>
+      <div>
+        <div class="user-name" id="sidebar-username">…</div>
+        <div class="user-role" style="color:var(--red)">👑 Administrator</div>
+      </div>
+    </div>
+    <form action="/auth/logout" method="POST">
+      <button type="submit" class="btn-logout">🚨 Đăng Xuất</button>
+    </form>
+  </div>
+</aside>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal" id="edit-modal-body">
+    <div class="modal-title" id="edit-modal-title">Chỉnh Sửa<button class="modal-close" onclick="closeEditModal()">×</button></div>
+    <div class="modal-alert" id="edit-alert"></div>
+    <div id="edit-form-fields"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeEditModal()">Huỷ</button>
+      <button class="btn-save" id="btn-save-edit" onclick="submitEdit()">💾 Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirm Modal -->
+<div class="modal-overlay" id="delete-modal">
+  <div class="modal confirm-modal">
+    <div class="confirm-icon">🗑️</div>
+    <div class="confirm-text" id="delete-confirm-text">Xác nhận xoá?</div>
+    <div class="confirm-sub" id="delete-confirm-sub">Hành động này không thể hoàn tác.</div>
+    <div class="modal-actions" style="justify-content:center">
+      <button class="btn-cancel" onclick="closeDeleteModal()">Huỷ</button>
+      <button class="btn-danger" id="btn-confirm-delete" onclick="confirmDelete()">🗑️ Xoá</button>
+    </div>
+  </div>
+</div>
+
+<!-- Profile Modal -->
+<div class="modal-overlay" id="profile-modal">
+  <div class="modal">
+    <div class="modal-title">⚙️ Cài Đặt Tài Khoản<button class="modal-close" onclick="closeProfileModal()">×</button></div>
+    <div class="modal-section">
+      <h4>🖼️ Ảnh Đại Diện</h4>
+      <div style="display:flex;align-items:center;gap:16px">
+        <img id="profile-avatar-preview" src="" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid rgba(108,99,255,0.4)" />
+        <div>
+          <label class="avatar-upload-label" for="avatar-file-input">📤 Chọn ảnh mới</label>
+          <input type="file" id="avatar-file-input" accept="image/*" style="display:none" onchange="previewAvatar(this)" />
+          <br/><div class="modal-alert" id="avatar-alert"></div>
+          <button class="btn-primary" onclick="uploadAvatar()" id="btn-upload-avatar">💾 Lưu Ảnh</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-section">
+      <h4>📧 Cập Nhật Email</h4>
+      <div class="modal-alert" id="email-alert"></div>
+      <input class="form-input" type="email" id="profile-email" placeholder="Email mới" style="margin-bottom:10px" />
+      <button class="btn-primary" onclick="updateEmail()">✔️ Lưu Email</button>
+    </div>
+    <div class="modal-section">
+      <h4>🔑 Đổi Mật Khẩu</h4>
+      <div class="modal-alert" id="pw-alert"></div>
+      <input class="form-input" type="password" id="current-pw" placeholder="Mật khẩu hiện tại" style="margin-bottom:8px" />
+      <input class="form-input" type="password" id="new-pw" placeholder="Mật khẩu mới (tối thiểu 8 ký tự)" style="margin-bottom:8px" />
+      <input class="form-input" type="password" id="confirm-pw" placeholder="Nhập lại mật khẩu mới" style="margin-bottom:10px" />
+      <button class="btn-primary" onclick="changePassword()">✔️ Đổi Mật Khẩu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="page-title" id="page-title">Tổng Quan</div>
+      <div class="page-sub">Northwind Admin – Toàn quyền quản lý</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Chuyển sáng/tối">🌙</button>
+      <span class="badge-admin">👑 ADMIN</span>
+    </div>
+  </div>
+  <div class="content">
+
+    <!-- Overview -->
+    <div class="tab-panel active" id="tab-overview">
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card"><div class="stat-icon">⏳</div><div class="stat-value">—</div><div class="stat-label">Đang tải…</div></div>
+      </div>
+      <div class="table-card">
+        <div class="table-header"><h3>🏆 Doanh Thu Theo Danh Mục</h3></div>
+        <table><thead><tr><th>#</th><th>Danh Mục</th><th>Doanh Thu (USD)</th><th>Số Đơn</th></tr></thead>
+        <tbody id="sales-body"><tr class="loading-row"><td colspan="4">Đang tải…</td></tr></tbody></table>
+      </div>
+    </div>
+
+    <!-- Customers -->
+    <div class="tab-panel" id="tab-customers">
+      <div class="table-card">
+        <div class="table-header">
+          <h3>👥 Khách Hàng</h3>
+          <input class="search-box" id="search-customers" placeholder="🔍 Tìm kiếm…" oninput="debounce(()=>loadCustomers(1),400)()" />
+        </div>
+        <table><thead><tr><th>ID</th><th>Công Ty</th><th>Liên Hệ</th><th>Thành Phố</th><th>Quốc Gia</th><th>Điện Thoại</th><th>Thao Tác</th></tr></thead>
+        <tbody id="customers-body"><tr class="loading-row"><td colspan="7">Đang tải…</td></tr></tbody></table>
+        <div class="table-footer">
+          <span id="customers-info"></span>
+          <div class="pager">
+            <button class="pager-btn" id="cust-prev" onclick="loadCustomers(custPage-1)">← Trước</button>
+            <button class="pager-btn" id="cust-next" onclick="loadCustomers(custPage+1)">Sau →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Orders -->
+    <div class="tab-panel" id="tab-orders">
+      <div class="table-card">
+        <div class="table-header"><h3>📦 Đơn Hàng</h3></div>
+        <table><thead><tr><th>OrderID</th><th>Khách Hàng</th><th>Nhân Viên</th><th>Ngày Đặt</th><th>Ngày Giao</th><th>Vận Chuyển</th><th>Quốc Gia</th><th>Thao Tác</th></tr></thead>
+        <tbody id="orders-body"><tr class="loading-row"><td colspan="8">Đang tải…</td></tr></tbody></table>
+        <div class="table-footer">
+          <span id="orders-info"></span>
+          <div class="pager">
+            <button class="pager-btn" id="ord-prev" onclick="loadOrders(ordPage-1)">← Trước</button>
+            <button class="pager-btn" id="ord-next" onclick="loadOrders(ordPage+1)">Sau →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Products -->
+    <div class="tab-panel" id="tab-products">
+      <div class="table-card">
+        <div class="table-header">
+          <h3>🏷️ Sản Phẩm</h3>
+          <input class="search-box" id="search-products" placeholder="🔍 Tìm kiếm…" oninput="debounce(()=>loadProducts(1),400)()" />
+        </div>
+        <table><thead><tr><th>ID</th><th>Sản Phẩm</th><th>Danh Mục</th><th>Nhà Cung Cấp</th><th>Đơn Giá</th><th>Tồn Kho</th><th>Trạng Thái</th><th>Thao Tác</th></tr></thead>
+        <tbody id="products-body"><tr class="loading-row"><td colspan="8">Đang tải…</td></tr></tbody></table>
+        <div class="table-footer">
+          <span id="products-info"></span>
+          <div class="pager">
+            <button class="pager-btn" id="prod-prev" onclick="loadProducts(prodPage-1)">← Trước</button>
+            <button class="pager-btn" id="prod-next" onclick="loadProducts(prodPage+1)">Sau →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Employees -->
+    <div class="tab-panel" id="tab-employees">
+      <div class="table-card">
+        <div class="table-header"><h3>🧑‍💼 Nhân Viên</h3></div>
+        <table><thead><tr><th>ID</th><th>Họ Tên</th><th>Chức Vụ</th><th>Thành Phố</th><th>Quốc Gia</th><th>Điện Thoại</th><th>Ngày Vào</th><th>Quản Lý</th><th>Thao Tác</th></tr></thead>
+        <tbody id="employees-body"><tr class="loading-row"><td colspan="9">Đang tải…</td></tr></tbody></table>
+        <div class="table-footer">
+          <span id="employees-info"></span>
+          <div class="pager">
+            <button class="pager-btn" id="emp-prev" onclick="loadEmployees(empPage-1)">← Trước</button>
+            <button class="pager-btn" id="emp-next" onclick="loadEmployees(empPage+1)">Sau →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Suppliers -->
+    <div class="tab-panel" id="tab-suppliers">
+      <div class="table-card">
+        <div class="table-header"><h3>🏭 Nhà Cung Cấp</h3></div>
+        <table><thead><tr><th>ID</th><th>Công Ty</th><th>Liên Hệ</th><th>Chức Vụ</th><th>Thành Phố</th><th>Quốc Gia</th><th>Điện Thoại</th><th>Thao Tác</th></tr></thead>
+        <tbody id="suppliers-body"><tr class="loading-row"><td colspan="8">Đang tải…</td></tr></tbody></table>
+        <div class="table-footer">
+          <span id="suppliers-info"></span>
+          <div class="pager">
+            <button class="pager-btn" id="sup-prev" onclick="loadSuppliers(supPage-1)">← Trước</button>
+            <button class="pager-btn" id="sup-next" onclick="loadSuppliers(supPage+1)">Sau →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Categories -->
+    <div class="tab-panel" id="tab-categories">
+      <div class="table-card">
+        <div class="table-header"><h3>🗂️ Danh Mục Sản Phẩm</h3></div>
+        <table><thead><tr><th>ID</th><th>Danh Mục</th><th>Mô Tả</th><th>Số SP</th></tr></thead>
+        <tbody id="categories-body"><tr class="loading-row"><td colspan="4">Đang tải…</td></tr></tbody></table>
+      </div>
+    </div>
+
+    <!-- Shippers -->
+    <div class="tab-panel" id="tab-shippers">
+      <div class="table-card">
+        <div class="table-header"><h3>🚚 Đơn Vị Vận Chuyển</h3></div>
+        <table><thead><tr><th>ID</th><th>Công Ty</th><th>Điện Thoại</th><th>Tổng Đơn</th></tr></thead>
+        <tbody id="shippers-body"><tr class="loading-row"><td colspan="4">Đang tải…</td></tr></tbody></table>
+      </div>
+    </div>
+
+    <!-- Regions -->
+    <div class="tab-panel" id="tab-regions">
+      <div class="table-card">
+        <div class="table-header"><h3>🗺️ Vùng & Khu Vực</h3></div>
+        <table><thead><tr><th>ID</th><th>Vùng</th><th>Số Khu Vực</th></tr></thead>
+        <tbody id="regions-body"><tr class="loading-row"><td colspan="3">Đang tải…</td></tr></tbody></table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let custPage=1, ordPage=1, prodPage=1, empPage=1, supPage=1;
+const LIMIT = 15;
+const fmt      = n => n?.toLocaleString('vi-VN') ?? '—';
+const fmtDate  = d => d ? d.split('T')[0] : '—';
+const fmtMoney = n => n != null ? '$' + Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
+
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(()=>fn(...a), ms); }; }
+
+function switchTab(tab, el) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  el.classList.add('active');
+  const titles = { overview:'Tổng Quan', customers:'Khách Hàng', orders:'Đơn Hàng', products:'Sản Phẩm', employees:'Nhân Viên', suppliers:'Nhà Cung Cấp', categories:'Danh Mục', shippers:'Vận Chuyển', regions:'Vùng & Khu Vực' };
+  document.getElementById('page-title').textContent = titles[tab] || tab;
+  if (tab==='customers' && custPage===1) loadCustomers(1);
+  if (tab==='orders'    && ordPage===1)  loadOrders(1);
+  if (tab==='products'  && prodPage===1) loadProducts(1);
+  if (tab==='employees' && empPage===1)  loadEmployees(1);
+  if (tab==='suppliers' && supPage===1)  loadSuppliers(1);
+  if (tab==='categories') loadCategories();
+  if (tab==='shippers')   loadShippers();
+  if (tab==='regions')    loadRegions();
+}
+
+// ── User info ─────────────────────────────────────────────────────────────
+function setAvatarDisplay(url) {
+  const wrap = document.getElementById('sidebar-avatar-wrap');
+  if (url) { wrap.innerHTML = `<img src="${url}" style="width:32px;height:32px;border-radius:50%;object-fit:cover">`; }
+  document.getElementById('profile-avatar-preview').src = url || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="%236c63ff" rx="50"/><text x="50" y="65" text-anchor="middle" font-size="45" fill="white">👑</text></svg>';
+}
+fetch('/api/me').then(r=>r.json()).then(d => {
+  document.getElementById('sidebar-username').textContent = d.username || 'admin';
+  document.getElementById('profile-email').value = d.email || '';
+  setAvatarDisplay(d.avatar);
+}).catch(() => { window.location.href = '/'; });
+
+// ── Profile modal ─────────────────────────────────────────────────────────
+function openProfileModal()  { document.getElementById('profile-modal').classList.add('open'); }
+function closeProfileModal() { document.getElementById('profile-modal').classList.remove('open'); }
+document.getElementById('profile-modal').addEventListener('click', e => { if (e.target === document.getElementById('profile-modal')) closeProfileModal(); });
+
+function showModalAlert(id, msg, ok) {
+  const el = document.getElementById(id);
+  el.textContent = (ok ? '✅ ' : '⚠️ ') + msg;
+  el.className = 'modal-alert ' + (ok ? 'ok' : 'err');
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 4000);
+}
+
+let avatarFile = null;
+function previewAvatar(input) {
+  avatarFile = input.files[0];
+  if (!avatarFile) return;
+  const reader = new FileReader();
+  reader.onload = e => { document.getElementById('profile-avatar-preview').src = e.target.result; };
+  reader.readAsDataURL(avatarFile);
+}
+async function uploadAvatar() {
+  if (!avatarFile) return showModalAlert('avatar-alert', 'Chưa chọn ảnh', false);
+  const btn = document.getElementById('btn-upload-avatar');
+  btn.disabled = true; btn.textContent = 'Đang tải…';
+  const fd = new FormData(); fd.append('avatar', avatarFile);
+  try {
+    const r = await fetch('/api/profile/avatar', { method:'POST', body:fd });
+    const d = await r.json();
+    if (d.success) { setAvatarDisplay(d.avatar); showModalAlert('avatar-alert', d.message, true); avatarFile = null; }
+    else showModalAlert('avatar-alert', d.message, false);
+  } catch { showModalAlert('avatar-alert', 'Lỗi kết nối', false); }
+  btn.disabled = false; btn.textContent = '💾 Lưu Ảnh';
+}
+async function updateEmail() {
+  const email = document.getElementById('profile-email').value.trim();
+  const r = await fetch('/api/profile/email', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ email }) });
+  const d = await r.json();
+  showModalAlert('email-alert', d.message, d.success);
+}
+async function changePassword() {
+  const cur = document.getElementById('current-pw').value;
+  const nw  = document.getElementById('new-pw').value;
+  const cf  = document.getElementById('confirm-pw').value;
+  if (nw !== cf) return showModalAlert('pw-alert', 'Mật khẩu xác nhận không khớp', false);
+  const r = await fetch('/api/profile/password', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ currentPassword:cur, newPassword:nw }) });
+  const d = await r.json();
+  showModalAlert('pw-alert', d.message, d.success);
+  if (d.success) { document.getElementById('current-pw').value=''; document.getElementById('new-pw').value=''; document.getElementById('confirm-pw').value=''; }
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────
+const STAT_DEF = [
+  {key:'customers',  icon:'👥',  label:'Khách Hàng',   tab:'customers'},
+  {key:'orders',     icon:'📦',  label:'Đơn Hàng',     tab:'orders'},
+  {key:'products',   icon:'🏷️', label:'Sản Phẩm',     tab:'products'},
+  {key:'employees',  icon:'🧑‍💼',label:'Nhân Viên',    tab:'employees'},
+  {key:'suppliers',  icon:'🏭',  label:'Nhà Cung Cấp', tab:'suppliers'},
+  {key:'categories', icon:'🗂️', label:'Danh Mục',     tab:'categories'},
+  {key:'shippers',   icon:'🚚',  label:'Vận Chuyển',   tab:'shippers'},
+  {key:'territories',icon:'🗺️', label:'Khu Vực',      tab:'regions'},
+];
+fetch('/api/stats').then(r=>r.json()).then(data => {
+  document.getElementById('stats-grid').innerHTML = STAT_DEF.map(s => `
+    <div class="stat-card" style="cursor:pointer" onclick="switchTab('${s.tab}',document.querySelector('.nav-item[onclick*=\\'${s.tab}\\']'))">
+      <div class="stat-icon">${s.icon}</div>
+      <div class="stat-value">${fmt(data[s.key])}</div>
+      <div class="stat-label">${s.label}</div>
+    </div>`).join('');
+});
+fetch('/api/sales-by-category').then(r=>r.json()).then(rows => {
+  document.getElementById('sales-body').innerHTML = rows.map((r,i) => `
+    <tr><td style="color:var(--muted)">${i+1}</td><td><strong>${r.CategoryName}</strong></td>
+    <td style="color:var(--green);font-weight:600">${fmtMoney(r.Revenue)}</td><td>${fmt(r.Orders)}</td></tr>`).join('');
+});
+
+// ── CRUD helpers ──────────────────────────────────────────────────────────
+let editCtx = null; // { type, id, reload }
+let deleteCtx = null; // { url, reload, name }
+
+function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); editCtx = null; }
+function closeDeleteModal() { document.getElementById('delete-modal').classList.remove('open'); deleteCtx = null; }
+document.getElementById('edit-modal').addEventListener('click', e => { if (e.target === document.getElementById('edit-modal')) closeEditModal(); });
+document.getElementById('delete-modal').addEventListener('click', e => { if (e.target === document.getElementById('delete-modal')) closeDeleteModal(); });
+
+function field(id, label, value, type='text', full=false) {
+  return `<div class="form-group${full?' full':''}">
+    <label>${label}</label>
+    <input class="form-input" id="ef-${id}" type="${type}" value="${(value||'').toString().replace(/"/g,'&quot;')}" />
+  </div>`;
+}
+function selectField(id, label, value, options) {
+  const opts = options.map(o => `<option value="${o.v}" ${value==o.v?'selected':''}>${o.l}</option>`).join('');
+  return `<div class="form-group"><label>${label}</label><select class="form-input form-select" id="ef-${id}">${opts}</select></div>`;
+}
+function val(id) { return document.getElementById('ef-' + id)?.value ?? ''; }
+
+async function openEdit(type, id, reloadFn) {
+  const r = await fetch(`/api/${type}/${id}`);
+  if (!r.ok) return alert('Không tải được dữ liệu');
+  const d = await r.json();
+  editCtx = { type, id, reload: reloadFn, data: d };
+  document.getElementById('edit-alert').style.display = 'none';
+
+  let fields = '';
+  let title = '';
+  if (type === 'customers') {
+    title = `✏️ Sửa Khách Hàng – ${id}`;
+    fields = `<div class="form-grid">
+      ${field('CompanyName','Tên Công Ty',d.CompanyName,'text',true)}
+      ${field('ContactName','Người Liên Hệ',d.ContactName)}
+      ${field('ContactTitle','Chức Danh',d.ContactTitle)}
+      ${field('Phone','Điện Thoại',d.Phone)}
+      ${field('Fax','Fax',d.Fax)}
+      ${field('Address','Địa Chỉ',d.Address,'text',true)}
+      ${field('City','Thành Phố',d.City)}
+      ${field('Region','Vùng',d.Region)}
+      ${field('PostalCode','Mã Bưu Điện',d.PostalCode)}
+      ${field('Country','Quốc Gia',d.Country)}
+    </div>`;
+  } else if (type === 'products') {
+    title = `✏️ Sửa Sản Phẩm #${id}`;
+    fields = `<div class="form-grid">
+      ${field('ProductName','Tên Sản Phẩm',d.ProductName,'text',true)}
+      ${field('UnitPrice','Đơn Giá (USD)',d.UnitPrice,'number')}
+      ${field('UnitsInStock','Tồn Kho',d.UnitsInStock,'number')}
+      ${field('UnitsOnOrder','Đang Đặt',d.UnitsOnOrder,'number')}
+      ${field('ReorderLevel','Mức Tái Đặt',d.ReorderLevel,'number')}
+      ${selectField('Discontinued','Trạng Thái',d.Discontinued,[{v:'0',l:'Đang bán'},{v:'1',l:'Ngừng bán'}])}
+    </div>`;
+  } else if (type === 'employees') {
+    title = `✏️ Sửa Nhân Viên #${id}`;
+    fields = `<div class="form-grid">
+      ${field('FirstName','Tên',d.FirstName)}
+      ${field('LastName','Họ',d.LastName)}
+      ${field('Title','Chức Vụ',d.Title,'text',true)}
+      ${field('HomePhone','Điện Thoại',d.HomePhone)}
+      ${field('City','Thành Phố',d.City)}
+      ${field('Region','Vùng',d.Region)}
+      ${field('Country','Quốc Gia',d.Country)}
+    </div>`;
+  } else if (type === 'suppliers') {
+    title = `✏️ Sửa Nhà Cung Cấp #${id}`;
+    fields = `<div class="form-grid">
+      ${field('CompanyName','Tên Công Ty',d.CompanyName,'text',true)}
+      ${field('ContactName','Người Liên Hệ',d.ContactName)}
+      ${field('ContactTitle','Chức Danh',d.ContactTitle)}
+      ${field('Phone','Điện Thoại',d.Phone)}
+      ${field('Fax','Fax',d.Fax)}
+      ${field('Address','Địa Chỉ',d.Address,'text',true)}
+      ${field('City','Thành Phố',d.City)}
+      ${field('Region','Vùng',d.Region)}
+      ${field('PostalCode','Mã Bưu Điện',d.PostalCode)}
+      ${field('Country','Quốc Gia',d.Country)}
+      ${field('HomePage','Website',d.HomePage,'text',true)}
+    </div>`;
+  }
+
+  document.getElementById('edit-modal-title').innerHTML = `${title}<button class="modal-close" onclick="closeEditModal()">×</button>`;
+  document.getElementById('edit-form-fields').innerHTML = fields;
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+async function submitEdit() {
+  if (!editCtx) return;
+  const { type, id, reload, data } = editCtx;
+  const btn = document.getElementById('btn-save-edit');
+  btn.disabled = true; btn.textContent = 'Đang lưu…';
+
+  let body = {};
+  if (type === 'customers') {
+    body = { CompanyName:val('CompanyName'), ContactName:val('ContactName'), ContactTitle:val('ContactTitle'),
+             Address:val('Address'), City:val('City'), Region:val('Region'), PostalCode:val('PostalCode'),
+             Country:val('Country'), Phone:val('Phone'), Fax:val('Fax') };
+  } else if (type === 'products') {
+    body = { ProductName:val('ProductName'), UnitPrice:parseFloat(val('UnitPrice')),
+             UnitsInStock:parseInt(val('UnitsInStock')), UnitsOnOrder:parseInt(val('UnitsOnOrder')),
+             ReorderLevel:parseInt(val('ReorderLevel')), Discontinued:val('Discontinued') };
+  } else if (type === 'employees') {
+    body = { FirstName:val('FirstName'), LastName:val('LastName'), Title:val('Title'),
+             City:val('City'), Country:val('Country'), Region:val('Region'), HomePhone:val('HomePhone') };
+  } else if (type === 'suppliers') {
+    body = { CompanyName:val('CompanyName'), ContactName:val('ContactName'), ContactTitle:val('ContactTitle'),
+             Address:val('Address'), City:val('City'), Region:val('Region'), PostalCode:val('PostalCode'),
+             Country:val('Country'), Phone:val('Phone'), Fax:val('Fax'), HomePage:val('HomePage') };
+  }
+
+  try {
+    const r = await fetch(`/api/${type}/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    const d = await r.json();
+    if (d.success) { closeEditModal(); reload(); }
+    else {
+      const alert = document.getElementById('edit-alert');
+      alert.textContent = '⚠️ ' + (d.error || 'Lỗi khi lưu');
+      alert.className = 'modal-alert err'; alert.style.display = 'block';
+    }
+  } catch { alert('Lỗi kết nối'); }
+  btn.disabled = false; btn.textContent = '💾 Lưu';
+}
+
+function openDelete(url, name, reloadFn) {
+  deleteCtx = { url, reload: reloadFn };
+  document.getElementById('delete-confirm-text').textContent = `Xoá "${name}"?`;
+  document.getElementById('delete-modal').classList.add('open');
+}
+
+async function confirmDelete() {
+  if (!deleteCtx) return;
+  const btn = document.getElementById('btn-confirm-delete');
+  btn.disabled = true; btn.textContent = 'Đang xoá…';
+  try {
+    const r = await fetch(deleteCtx.url, { method:'DELETE' });
+    const d = await r.json();
+    if (d.success) { closeDeleteModal(); deleteCtx.reload(); }
+    else alert(d.error || 'Lỗi khi xoá');
+  } catch { alert('Lỗi kết nối'); }
+  btn.disabled = false; btn.textContent = '🗑️ Xoá';
+}
+
+// ── Customers ─────────────────────────────────────────────────────────────
+async function loadCustomers(page) {
+  if (page < 1) return; custPage = page;
+  const q = document.getElementById('search-customers').value;
+  const r = await fetch(`/api/customers?page=${page}&limit=${LIMIT}&search=${encodeURIComponent(q)}`);
+  const d = await r.json();
+  const totalPages = Math.ceil(d.total / LIMIT) || 1;
+  document.getElementById('customers-body').innerHTML = d.data.map(c => `
+    <tr>
+      <td><code style="color:var(--accent2)">${c.CustomerID}</code></td>
+      <td><strong>${c.CompanyName}</strong></td>
+      <td>${c.ContactName||'—'}</td><td>${c.City||'—'}</td><td>${c.Country||'—'}</td>
+      <td style="color:var(--muted)">${c.Phone||'—'}</td>
+      <td>
+        <button class="act-btn act-edit" onclick="openEdit('customers','${c.CustomerID}',()=>loadCustomers(custPage))">✏️ Sửa</button>
+        <button class="act-btn act-delete" onclick="openDelete('/api/customers/${c.CustomerID}','${c.CompanyName.replace(/'/g,"\\'")}',()=>loadCustomers(custPage))">🗑️</button>
+      </td>
+    </tr>`).join('');
+  document.getElementById('customers-info').textContent = `Trang ${page}/${totalPages} — ${fmt(d.total)} khách hàng`;
+  document.getElementById('cust-prev').disabled = page <= 1;
+  document.getElementById('cust-next').disabled = page >= totalPages;
+}
+
+// ── Orders ────────────────────────────────────────────────────────────────
+async function loadOrders(page) {
+  if (page < 1) return; ordPage = page;
+  const r = await fetch(`/api/orders?page=${page}&limit=${LIMIT}`);
+  const d = await r.json();
+  const totalPages = Math.ceil(d.total / LIMIT) || 1;
+  document.getElementById('orders-body').innerHTML = d.data.map(o => `
+    <tr>
+      <td><code style="color:var(--accent2)">#${o.OrderID}</code></td>
+      <td>${o.Customer||'—'}</td><td>${o.Employee||'—'}</td>
+      <td>${fmtDate(o.OrderDate)}</td><td>${fmtDate(o.ShippedDate)}</td>
+      <td style="color:var(--green)">${fmtMoney(o.Freight)}</td><td>${o.ShipCountry||'—'}</td>
+      <td>
+        <button class="act-btn act-del-only" onclick="openDelete('/api/orders/${o.OrderID}','Đơn #${o.OrderID}',()=>loadOrders(ordPage))">🗑️ Xoá</button>
+      </td>
+    </tr>`).join('');
+  document.getElementById('orders-info').textContent = `Trang ${page}/${totalPages} — ${fmt(d.total)} đơn hàng`;
+  document.getElementById('ord-prev').disabled = page <= 1;
+  document.getElementById('ord-next').disabled = page >= totalPages;
+}
+
+// ── Products ──────────────────────────────────────────────────────────────
+async function loadProducts(page) {
+  if (page < 1) return; prodPage = page;
+  const q = document.getElementById('search-products').value;
+  const r = await fetch(`/api/products?page=${page}&limit=${LIMIT}&search=${encodeURIComponent(q)}`);
+  const d = await r.json();
+  const totalPages = Math.ceil(d.total / LIMIT) || 1;
+  document.getElementById('products-body').innerHTML = d.data.map(p => `
+    <tr>
+      <td style="color:var(--muted)">${p.ProductID}</td>
+      <td><strong>${p.ProductName}</strong></td>
+      <td>${p.CategoryName||'—'}</td><td>${p.Supplier||'—'}</td>
+      <td style="color:var(--yellow)">${fmtMoney(p.UnitPrice)}</td>
+      <td>${fmt(p.UnitsInStock)}</td>
+      <td><span class="tag ${p.Discontinued==='1'||p.Discontinued===1?'tag-red':'tag-green'}">${p.Discontinued==='1'||p.Discontinued===1?'Ngừng bán':'Đang bán'}</span></td>
+      <td>
+        <button class="act-btn act-edit" onclick="openEdit('products',${p.ProductID},()=>loadProducts(prodPage))">✏️ Sửa</button>
+        <button class="act-btn act-delete" onclick="openDelete('/api/products/${p.ProductID}','${p.ProductName.replace(/'/g,"\\'")}',()=>loadProducts(prodPage))">🗑️</button>
+      </td>
+    </tr>`).join('');
+  document.getElementById('products-info').textContent = `Trang ${page}/${totalPages} — ${fmt(d.total)} sản phẩm`;
+  document.getElementById('prod-prev').disabled = page <= 1;
+  document.getElementById('prod-next').disabled = page >= totalPages;
+}
+
+// ── Employees ─────────────────────────────────────────────────────────────
+async function loadEmployees(page) {
+  if (page < 1) return; empPage = page;
+  const r = await fetch(`/api/employees?page=${page}&limit=${LIMIT}`);
+  const d = await r.json();
+  const totalPages = Math.ceil(d.total / LIMIT) || 1;
+  document.getElementById('employees-body').innerHTML = d.data.map(e => `
+    <tr>
+      <td style="color:var(--muted)">${e.EmployeeID}</td>
+      <td><strong>${e.FullName||'—'}</strong></td>
+      <td>${e.Title||'—'}</td><td>${e.City||'—'}</td><td>${e.Country||'—'}</td>
+      <td style="color:var(--muted)">${e.HomePhone||'—'}</td>
+      <td>${fmtDate(e.HireDate)}</td><td style="color:var(--accent2)">${e.Manager||'—'}</td>
+      <td>
+        <button class="act-btn act-edit" onclick="openEdit('employees',${e.EmployeeID},()=>loadEmployees(empPage))">✏️ Sửa</button>
+        <button class="act-btn act-delete" onclick="openDelete('/api/employees/${e.EmployeeID}','${(e.FullName||'').replace(/'/g,"\\'")}',()=>loadEmployees(empPage))">🗑️</button>
+      </td>
+    </tr>`).join('');
+  document.getElementById('employees-info').textContent = `Trang ${page}/${totalPages} — ${fmt(d.total)} nhân viên`;
+  document.getElementById('emp-prev').disabled = page <= 1;
+  document.getElementById('emp-next').disabled = page >= totalPages;
+}
+
+// ── Suppliers ─────────────────────────────────────────────────────────────
+async function loadSuppliers(page) {
+  if (page < 1) return; supPage = page;
+  const r = await fetch(`/api/suppliers?page=${page}&limit=${LIMIT}`);
+  const d = await r.json();
+  const totalPages = Math.ceil(d.total / LIMIT) || 1;
+  document.getElementById('suppliers-body').innerHTML = d.data.map(s => `
+    <tr>
+      <td style="color:var(--muted)">${s.SupplierID}</td>
+      <td><strong>${s.CompanyName||'—'}</strong></td>
+      <td>${s.ContactName||'—'}</td><td>${s.ContactTitle||'—'}</td>
+      <td>${s.City||'—'}</td><td>${s.Country||'—'}</td>
+      <td style="color:var(--muted)">${s.Phone||'—'}</td>
+      <td>
+        <button class="act-btn act-edit" onclick="openEdit('suppliers',${s.SupplierID},()=>loadSuppliers(supPage))">✏️ Sửa</button>
+        <button class="act-btn act-delete" onclick="openDelete('/api/suppliers/${s.SupplierID}','${s.CompanyName.replace(/'/g,"\\'")}',()=>loadSuppliers(supPage))">🗑️</button>
+      </td>
+    </tr>`).join('');
+  document.getElementById('suppliers-info').textContent = `Trang ${page}/${totalPages} — ${fmt(d.total)} nhà cung cấp`;
+  document.getElementById('sup-prev').disabled = page <= 1;
+  document.getElementById('sup-next').disabled = page >= totalPages;
+}
+
+// ── Categories ────────────────────────────────────────────────────────────
+async function loadCategories() {
+  const r = await fetch('/api/categories'); const d = await r.json();
+  document.getElementById('categories-body').innerHTML = d.data.map(c => `
+    <tr><td style="color:var(--muted)">${c.CategoryID}</td><td><strong>${c.CategoryName||'—'}</strong></td>
+    <td style="color:var(--muted);font-size:12px">${c.Description||'—'}</td>
+    <td><span class="tag tag-green">${fmt(c.ProductCount)} SP</span></td></tr>`).join('');
+}
+
+async function loadShippers() {
+  const r = await fetch('/api/shippers'); const d = await r.json();
+  document.getElementById('shippers-body').innerHTML = d.data.map(s => `
+    <tr><td style="color:var(--muted)">${s.ShipperID}</td><td><strong>${s.CompanyName||'—'}</strong></td>
+    <td style="color:var(--muted)">${s.Phone||'—'}</td>
+    <td><span class="tag tag-green">${fmt(s.TotalOrders)} đơn</span></td></tr>`).join('');
+}
+
+async function loadRegions() {
+  const r = await fetch('/api/regions'); const d = await r.json();
+  document.getElementById('regions-body').innerHTML = d.data.map(r => `
+    <tr><td style="color:var(--muted)">${r.RegionID}</td><td><strong>${r.RegionDescription||'—'}</strong></td>
+    <td><span class="tag tag-green">${fmt(r.TerritoryCount)} khu vực</span></td></tr>`).join('');
+}
+
+// ── Theme toggle ──────────────────────────────────────────────────────────
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('theme-btn').textContent = theme === 'dark' ? '🌙' : '☀️';
+}
+function toggleTheme() {
+  const next = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('nw-theme', next);
+  applyTheme(next);
+}
+applyTheme(localStorage.getItem('nw-theme') || 'dark');
+</script>
+</body>
+</html>
