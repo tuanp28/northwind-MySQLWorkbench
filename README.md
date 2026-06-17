@@ -39,14 +39,6 @@ Open:
 http://localhost:3001
 ```
 
-### Demo Accounts
-
-| Role | Username | Password |
-|------|----------|----------|
-| Admin | `admin` | `Admin@2024` |
-| Employee | `employee` | `Employee@2024` |
-
-Passwords are stored only as bcrypt hashes in the `Users` table.
 
 ### DBS401 Business Flows
 
