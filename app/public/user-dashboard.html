@@ -188,21 +188,29 @@
     }
 
     .nav-icon {
-      width: 7px;
-      height: 7px;
-      margin-right: 13px;
-      border-radius: 999px;
-      background: currentColor;
-      color: transparent;
-      font-size: 0;
-      opacity: 0.46;
-      font-weight: 800;
+      width: 20px;
+      height: 20px;
+      margin-right: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: currentColor;
+      opacity: 0.84;
+    }
+
+    .nav-icon svg {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
     }
 
     .nav-link.active .nav-icon {
-      background: #93c5fd;
       opacity: 1;
-      box-shadow: 0 0 0 5px rgba(147, 197, 253, 0.12);
+      color: #93c5fd;
     }
 
     .sidebar-footer {
@@ -248,6 +256,8 @@
     .logout-btn {
       width: 100%;
       min-height: 40px;
+      display: flex;
+      align-items: center;
       border: 0;
       border-radius: 10px;
       background: transparent;
@@ -255,6 +265,11 @@
       font-weight: 700;
       text-align: left;
       padding-left: 14px;
+    }
+
+    .logout-btn .nav-icon {
+      color: #fca5a5;
+      opacity: 0.9;
     }
 
     .logout-btn:hover {
@@ -346,6 +361,16 @@
       background: var(--primary-soft);
       color: var(--primary);
       font-weight: 800;
+    }
+
+    .stat-icon svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
     }
 
     .stat-label {
@@ -594,12 +619,12 @@
 
     <nav class="sidebar-nav">
       <div class="sidebar-section">Workspace</div>
-      <button class="nav-link active" type="button" data-view="dashboard" onclick="showView('dashboard')"><span class="nav-icon">D</span><span class="nav-text">Dashboard</span></button>
-      <button class="nav-link" type="button" data-view="orders" onclick="showView('orders')"><span class="nav-icon">O</span><span class="nav-text">Orders</span></button>
-      <button class="nav-link" type="button" data-view="customers" onclick="showView('customers')"><span class="nav-icon">C</span><span class="nav-text">Customers</span></button>
-      <button class="nav-link" type="button" data-view="products" onclick="showView('products')"><span class="nav-icon">P</span><span class="nav-text">Products</span></button>
-      <button class="nav-link" type="button" data-view="employees" onclick="showView('employees')"><span class="nav-icon">E</span><span class="nav-text">Employees</span></button>
-      <button class="nav-link" type="button" data-view="reports" onclick="showView('reports')"><span class="nav-icon">R</span><span class="nav-text">Reports</span></button>
+      <button class="nav-link active" type="button" data-view="dashboard" onclick="showView('dashboard')"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 13h6V4H4z"></path><path d="M14 20h6V4h-6z"></path><path d="M4 20h6v-3H4z"></path></svg></span><span class="nav-text">Dashboard</span></button>
+      <button class="nav-link" type="button" data-view="orders" onclick="showView('orders')"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5z"></path><path d="M3 8v8l9 5 9-5V8"></path><path d="M12 13v8"></path></svg></span><span class="nav-text">Orders</span></button>
+      <button class="nav-link" type="button" data-view="customers" onclick="showView('customers')"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M16 11a4 4 0 1 0-8 0"></path><path d="M4 21a8 8 0 0 1 16 0"></path><path d="M18 7a3 3 0 0 1 3 3"></path></svg></span><span class="nav-text">Customers</span></button>
+      <button class="nav-link" type="button" data-view="products" onclick="showView('products')"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M20 12v8H4v-8"></path><path d="M2 7h20v5H2z"></path><path d="M12 7v13"></path><path d="M7 7a3 3 0 0 1 5 0"></path><path d="M17 7a3 3 0 0 0-5 0"></path></svg></span><span class="nav-text">Products</span></button>
+      <button class="nav-link" type="button" data-view="employees" onclick="showView('employees')"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"></path><path d="M6 21v-2a6 6 0 0 1 12 0v2"></path><path d="M9 15l3 3 3-3"></path></svg></span><span class="nav-text">Employees</span></button>
+      <button class="nav-link" type="button" data-view="reports" onclick="showView('reports')"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19V5"></path><path d="M4 19h16"></path><path d="M8 16v-5"></path><path d="M12 16V8"></path><path d="M16 16v-3"></path></svg></span><span class="nav-text">Reports</span></button>
     </nav>
 
     <div class="sidebar-footer">
@@ -611,7 +636,7 @@
         </div>
       </div>
       <form action="/auth/logout" method="POST">
-        <button class="logout-btn" type="submit">Logout</button>
+        <button class="logout-btn" type="submit"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M21 3v18"></path></svg></span>Logout</button>
       </form>
     </div>
   </aside>
@@ -814,6 +839,13 @@
     const number = value => Number(value || 0).toLocaleString('en-US');
     const date = value => value ? String(value).slice(0, 10) : '-';
     const safe = value => String(value ?? '-').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const metricIcon = name => ({
+      orders: '<svg viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5z"></path><path d="M3 8v8l9 5 9-5V8"></path><path d="M12 13v8"></path></svg>',
+      customers: '<svg viewBox="0 0 24 24"><path d="M16 11a4 4 0 1 0-8 0"></path><path d="M4 21a8 8 0 0 1 16 0"></path><path d="M18 7a3 3 0 0 1 3 3"></path></svg>',
+      products: '<svg viewBox="0 0 24 24"><path d="M20 12v8H4v-8"></path><path d="M2 7h20v5H2z"></path><path d="M12 7v13"></path><path d="M7 7a3 3 0 0 1 5 0"></path><path d="M17 7a3 3 0 0 0-5 0"></path></svg>',
+      employees: '<svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"></path><path d="M6 21v-2a6 6 0 0 1 12 0v2"></path><path d="M9 15l3 3 3-3"></path></svg>',
+      revenue: '<svg viewBox="0 0 24 24"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6"></path></svg>'
+    }[name] || "");
 
     async function api(path, options = {}) {
       const response = await fetch(path, {
@@ -891,15 +923,15 @@
         state.sales = sales || [];
         const revenue = state.sales.reduce((sum, row) => sum + Number(row.Revenue || 0), 0);
         const cards = [
-          ['O', 'Total Orders', stats.orders],
-          ['C', 'Total Customers', stats.customers],
-          ['P', 'Total Products', stats.products],
-          ['E', 'Total Employees', stats.employees],
-          ['$', 'Total Revenue', money(revenue)]
+          ['orders', 'Total Orders', stats.orders],
+          ['customers', 'Total Customers', stats.customers],
+          ['products', 'Total Products', stats.products],
+          ['employees', 'Total Employees', stats.employees],
+          ['revenue', 'Total Revenue', money(revenue)]
         ];
         document.getElementById('summary-grid').innerHTML = cards.map(([icon, label, value]) => `
           <article class="stat-card">
-            <div class="stat-icon">${safe(icon)}</div>
+            <div class="stat-icon">${metricIcon(icon)}</div>
             <div><div class="stat-label">${safe(label)}</div><div class="stat-value">${typeof value === 'number' ? number(value) : safe(value)}</div></div>
           </article>
         `).join('');
