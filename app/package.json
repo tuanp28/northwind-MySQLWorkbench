@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "mysql:migrate": "node scripts/mysql-migrate.js"
+    "mysql:migrate": "node scripts/mysql-migrate.js",
+    "security:migrate": "node scripts/apply-security-migrations.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

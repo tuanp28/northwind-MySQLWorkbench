@@ -1,0 +1,18 @@
+CREATE TABLE IF NOT EXISTS AuditLogs (
+  LogID BIGINT NOT NULL AUTO_INCREMENT,
+  UserID INT NULL,
+  Action VARCHAR(80) NOT NULL,
+  TableName VARCHAR(80) NULL,
+  RecordID VARCHAR(80) NULL,
+  OldValue JSON NULL,
+  NewValue JSON NULL,
+  IPAddress VARCHAR(80) NULL,
+  CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (LogID),
+  KEY idx_audit_user_id (UserID),
+  KEY idx_audit_action_created (Action, CreatedAt),
+  CONSTRAINT fk_audit_user FOREIGN KEY (UserID)
+    REFERENCES Users(UserID)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE
+);

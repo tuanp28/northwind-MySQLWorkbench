@@ -53,7 +53,7 @@ async function initDatabase() {
 
 async function dbAll(sql, params = []) {
   if (DB_CLIENT === 'mysql') {
-    const [rows] = await mysqlPool.execute(normalizeSql(sql), params);
+    const [rows] = await mysqlPool.query(normalizeSql(sql), params);
     return rows;
   }
 
@@ -77,13 +77,61 @@ async function dbGet(sql, params = []) {
 
 async function dbRun(sql, params = []) {
   if (DB_CLIENT === 'mysql') {
-    await mysqlPool.execute(normalizeSql(sql), params);
-    return;
+    const [result] = await mysqlPool.query(normalizeSql(sql), params);
+    return result;
   }
 
   sqliteDb.run(sql, params);
   const data = sqliteDb.export();
   fs.writeFileSync(DB_PATH, Buffer.from(data));
+}
+
+async function withTransaction(work) {
+  if (DB_CLIENT !== 'mysql') {
+    sqliteDb.run('BEGIN TRANSACTION');
+    try {
+      const tx = {
+        all: dbAll,
+        get: dbGet,
+        run: async (sql, params = []) => sqliteDb.run(sql, params)
+      };
+      const result = await work(tx);
+      sqliteDb.run('COMMIT');
+      const data = sqliteDb.export();
+      fs.writeFileSync(DB_PATH, Buffer.from(data));
+      return result;
+    } catch (err) {
+      sqliteDb.run('ROLLBACK');
+      throw err;
+    }
+  }
+
+  const conn = await mysqlPool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const tx = {
+      all: async (sql, params = []) => {
+        const [rows] = await conn.query(normalizeSql(sql), params);
+        return rows;
+      },
+      get: async (sql, params = []) => {
+        const [rows] = await conn.query(normalizeSql(sql), params);
+        return rows[0] || null;
+      },
+      run: async (sql, params = []) => {
+        const [result] = await conn.query(normalizeSql(sql), params);
+        return result;
+      }
+    };
+    const result = await work(tx);
+    await conn.commit();
+    return result;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 module.exports = {
@@ -92,5 +140,6 @@ module.exports = {
   dbRun,
   dbClient: DB_CLIENT,
   initDatabase,
-  quoteId
+  quoteId,
+  withTransaction
 };

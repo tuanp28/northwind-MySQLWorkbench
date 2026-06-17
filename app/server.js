@@ -7,7 +7,7 @@ const fs         = require('fs');
 const crypto     = require('crypto');
 const nodemailer = require('nodemailer');
 const multer     = require('multer');
-const { dbAll, dbGet, dbRun, initDatabase, quoteId } = require('./db');
+const { dbAll, dbGet, dbRun, initDatabase, quoteId, withTransaction } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,6 +22,60 @@ initDatabase().then(startServer).catch(err => {
 function maskPhone(phone) {
   if (!phone) return 'â€”';
   return phone.replace(/\d(?=\d{3})/g, '*');
+}
+
+function normalizeRole(role) {
+  return String(role || '').toLowerCase();
+}
+
+function isAdminSession(req) {
+  return normalizeRole(req.session?.role) === 'admin';
+}
+
+function isEmployeeSession(req) {
+  return normalizeRole(req.session?.role) === 'employee';
+}
+
+function getIPAddress(req) {
+  return (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').toString().split(',')[0].trim();
+}
+
+function safeJson(value) {
+  if (value === undefined || value === null) return null;
+  return JSON.stringify(value);
+}
+
+function sendSafeError(res, status, message) {
+  return res.status(status).json({ success: false, error: message, message });
+}
+
+function setAuthenticatedSession(req, user) {
+  req.session.authenticated = true;
+  req.session.userId = user.UserID;
+  req.session.username = user.Username;
+  req.session.role = user.Role;
+  req.session.employeeId = user.EmployeeID;
+  req.session.loginTime = new Date().toISOString();
+}
+
+async function auditLog(req, action, tableName = null, recordId = null, oldValue = null, newValue = null, userId = undefined) {
+  try {
+    await dbRun(
+      `INSERT INTO AuditLogs (UserID, Action, TableName, RecordID, OldValue, NewValue, IPAddress)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        userId !== undefined ? userId : (req.session?.userId || null),
+        action,
+        tableName,
+        recordId ? String(recordId) : null,
+        safeJson(oldValue),
+        safeJson(newValue),
+        getIPAddress(req)
+      ]
+    );
+  } catch (err) {
+    console.error('Audit log failed:', err.message);
+  }
 }
 
 // â”€â”€ Profile helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -133,16 +187,25 @@ function requireAuth(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-  if (req.session && req.session.authenticated && req.session.role === 'admin') return next();
-  if (req.session && req.session.authenticated) return res.status(403).json({ error: 'Chá»‰ admin má»›i cĂ³ quyá»n thá»±c hiá»‡n thao tĂ¡c nĂ y' });
+  if (req.session && req.session.authenticated && isAdminSession(req)) return next();
+  if (req.session && req.session.authenticated) return res.status(403).json({ error: 'Forbidden' });
   res.redirect('/');
+}
+
+function requireRole(...roles) {
+  const allowed = roles.map(normalizeRole);
+  return (req, res, next) => {
+    if (!req.session?.authenticated) return res.status(401).json({ error: 'Authentication required' });
+    if (!allowed.includes(normalizeRole(req.session.role))) return res.status(403).json({ error: 'Forbidden' });
+    next();
+  };
 }
 
 // â”€â”€ Routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 app.get('/', (req, res) => {
   if (req.session && req.session.authenticated) {
-    return res.redirect(req.session.role === 'admin' ? '/dashboard' : '/user');
+    return res.redirect(isAdminSession(req) ? '/dashboard' : '/user');
   }
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
@@ -150,57 +213,66 @@ app.get('/', (req, res) => {
 // â”€â”€ Auth: BÆ°á»›c 1 â€“ xĂ¡c minh máº­t kháº©u â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.post('/auth/login', async (req, res) => {
   const { username, password } = req.body;
+  const safeMessage = 'Invalid username or password';
 
-  let role = null;
-  let hash = null;
-  if (username === process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD_HASH) {
-    role = 'admin'; hash = process.env.ADMIN_PASSWORD_HASH;
-  } else if (username === process.env.USER_USERNAME && process.env.USER_PASSWORD_HASH) {
-    role = 'user'; hash = process.env.USER_PASSWORD_HASH;
+  if (!username || !password) {
+    await auditLog(req, 'LOGIN_FAILED', 'Users', username || null, null, { reason: 'missing_credentials' }, null);
+    return res.status(401).json({ success: false, message: safeMessage });
   }
-
-  if (!role) return res.status(401).json({ success: false, message: 'TĂªn Ä‘Äƒng nháº­p hoáº·c máº­t kháº©u khĂ´ng Ä‘Ăºng' });
 
   try {
-    const match = await bcrypt.compare(password, hash);
-    if (!match) return res.status(401).json({ success: false, message: 'TĂªn Ä‘Äƒng nháº­p hoáº·c máº­t kháº©u khĂ´ng Ä‘Ăºng' });
-  } catch { return res.status(500).json({ success: false, message: 'Lá»—i xĂ¡c thá»±c' }); }
+    const user = await dbGet(
+      `SELECT UserID, Username, PasswordHash, Role, EmployeeID, Status
+       FROM Users
+       WHERE Username = ?`,
+      [username.trim()]
+    );
+    const match = user ? await bcrypt.compare(password, user.PasswordHash) : false;
+    if (!user || !match || user.Status !== 'Active') {
+      await auditLog(req, 'LOGIN_FAILED', 'Users', username.trim(), null, { reason: 'invalid_credentials_or_disabled' }, user?.UserID || null);
+      return res.status(401).json({ success: false, message: safeMessage });
+    }
 
-  const redirect = role === 'admin' ? '/dashboard' : '/user';
+    const redirect = normalizeRole(user.Role) === 'admin' ? '/dashboard' : '/user';
 
-  // User luĂ´n bá» qua 2FA; Admin tuá»³ cáº¥u hĂ¬nh
-  if (TWO_FACTOR_DISABLED || role === 'user') {
-    req.session.authenticated = true;
-    req.session.username = username;
-    req.session.role = role;
-    req.session.loginTime = new Date().toISOString();
-    return res.json({ success: true, redirect });
+    // Employees bypass OTP; Admin OTP remains configurable for the existing UI.
+    if (TWO_FACTOR_DISABLED || normalizeRole(user.Role) === 'employee') {
+      setAuthenticatedSession(req, user);
+      await auditLog(req, 'LOGIN_SUCCESS', 'Users', user.UserID, null, { role: user.Role, employeeId: user.EmployeeID }, user.UserID);
+      return res.json({ success: true, redirect });
+    }
+
+    req.session.pendingAuth = user.Username;
+    req.session.pendingUser = {
+      UserID: user.UserID,
+      Username: user.Username,
+      Role: user.Role,
+      EmployeeID: user.EmployeeID
+    };
+    await sendOTPToUser(user.Username, res, 'otp');
+  } catch (err) {
+    console.error('Login failed:', err.message);
+    return res.status(500).json({ success: false, message: 'Authentication failed' });
   }
-
-  req.session.pendingAuth = username;
-  req.session.pendingRole = role;
-  await sendOTPToUser(username, res, 'otp');
 });
 
-// â”€â”€ Auth: BÆ°á»›c 2 â€“ xĂ¡c minh OTP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.post('/auth/verify-otp', (req, res) => {
   const { username, otp } = req.body;
   const record = otpStore[username];
-  if (!record) return res.status(400).json({ success: false, message: 'PhiĂªn OTP khĂ´ng tá»“n táº¡i. Vui lĂ²ng Ä‘Äƒng nháº­p láº¡i' });
+  if (!record) return res.status(400).json({ success: false, message: 'OTP session not found. Please login again.' });
   if (Date.now() > record.expires) {
     delete otpStore[username];
-    return res.status(400).json({ success: false, message: 'MĂ£ OTP Ä‘Ă£ háº¿t háº¡n. Vui lĂ²ng Ä‘Äƒng nháº­p láº¡i' });
+    return res.status(400).json({ success: false, message: 'OTP expired. Please login again.' });
   }
-  if (otp !== record.otp) return res.status(401).json({ success: false, message: 'MĂ£ OTP khĂ´ng Ä‘Ăºng' });
+  if (otp !== record.otp) return res.status(401).json({ success: false, message: 'Invalid OTP' });
+
   delete otpStore[username];
-  const role = req.session.pendingRole || 'admin';
+  const pendingUser = req.session.pendingUser || { Username: username, Role: 'Admin', UserID: null, EmployeeID: null };
   delete req.session.pendingAuth;
-  delete req.session.pendingRole;
-  req.session.authenticated = true;
-  req.session.username = username;
-  req.session.role = role;
-  req.session.loginTime = new Date().toISOString();
-  res.json({ success: true, redirect: role === 'admin' ? '/dashboard' : '/user' });
+  delete req.session.pendingUser;
+  setAuthenticatedSession(req, pendingUser);
+  auditLog(req, 'LOGIN_SUCCESS', 'Users', pendingUser.UserID, null, { role: pendingUser.Role, employeeId: pendingUser.EmployeeID }, pendingUser.UserID);
+  res.json({ success: true, redirect: normalizeRole(pendingUser.Role) === 'admin' ? '/dashboard' : '/user' });
 });
 
 // â”€â”€ Auth: Gá»­i láº¡i OTP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -227,8 +299,8 @@ app.get('/user', requireAuth, (req, res) => {
 // â”€â”€ API: Session + Profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.get('/api/me', requireAuth, async (req, res) => {
   const profile = loadProfile();
-  res.json({ username: req.session.username, loginTime: req.session.loginTime,
-             role: req.session.role, email: profile.email, avatar: profile.avatar });
+  res.json({ userId: req.session.userId, username: req.session.username, loginTime: req.session.loginTime,
+             role: req.session.role, employeeId: req.session.employeeId, email: profile.email, avatar: profile.avatar });
 });
 
 app.get('/api/profile', requireAuth, async (req, res) => {
@@ -272,6 +344,141 @@ app.post('/api/profile/avatar', requireAdmin, uploadAvatar.single('avatar'), (re
 }, (err, req, res, next) => {
   res.status(400).json({ success: false, message: err.message });
 });
+
+app.get('/api/users', requireAdmin, async (req, res) => {
+  try {
+    const rows = await dbAll(`
+      SELECT u.UserID, u.Username, u.Role, u.EmployeeID, u.Status, u.CreatedAt,
+             CONCAT(e.FirstName, ' ', e.LastName) AS EmployeeName
+      FROM Users u
+      LEFT JOIN Employees e ON u.EmployeeID = e.EmployeeID
+      ORDER BY u.UserID
+    `);
+    res.json({ data: rows, total: rows.length });
+  } catch (err) {
+    console.error('Load users failed:', err.message);
+    sendSafeError(res, 500, 'Unable to load users');
+  }
+});
+
+app.post('/api/users', requireAdmin, async (req, res) => {
+  const username = String(req.body.Username || '').trim();
+  const password = String(req.body.Password || '');
+  const role = String(req.body.Role || 'Employee');
+  const employeeId = req.body.EmployeeID ? parsePositiveInt(req.body.EmployeeID, 'EmployeeID') : null;
+  if (!/^[A-Za-z0-9_.-]{3,80}$/.test(username)) return sendSafeError(res, 400, 'Username is invalid');
+  if (!['Admin', 'Employee'].includes(role)) return sendSafeError(res, 400, 'Role is invalid');
+  if (password.length < 8) return sendSafeError(res, 400, 'Password must be at least 8 characters');
+
+  try {
+    const hash = await bcrypt.hash(password, 12);
+    const result = await dbRun(
+      'INSERT INTO Users (Username, PasswordHash, Role, EmployeeID, Status) VALUES (?, ?, ?, ?, ?)',
+      [username, hash, role, employeeId, 'Active']
+    );
+    await auditLog(req, 'CREATE_USER', 'Users', result?.insertId || username, null, { Username: username, Role: role, EmployeeID: employeeId, Status: 'Active' });
+    res.status(201).json({ success: true });
+  } catch (err) {
+    console.error('Create user failed:', err.message);
+    sendSafeError(res, 400, 'Unable to create user');
+  }
+});
+
+app.put('/api/users/:id', requireAdmin, async (req, res) => {
+  const userId = parsePositiveInt(req.params.id, 'UserID');
+  const role = String(req.body.Role || '');
+  const employeeId = req.body.EmployeeID ? parsePositiveInt(req.body.EmployeeID, 'EmployeeID') : null;
+  if (!['Admin', 'Employee'].includes(role)) return sendSafeError(res, 400, 'Role is invalid');
+
+  const oldValue = await dbGet('SELECT UserID, Username, Role, EmployeeID, Status FROM Users WHERE UserID=?', [userId]);
+  if (!oldValue) return sendSafeError(res, 404, 'User not found');
+  await dbRun('UPDATE Users SET Role=?, EmployeeID=? WHERE UserID=?', [role, employeeId, userId]);
+  await auditLog(req, 'EDIT_USER_ROLE', 'Users', userId, oldValue, { Role: role, EmployeeID: employeeId });
+  res.json({ success: true });
+});
+
+app.put('/api/users/:id/status', requireAdmin, async (req, res) => {
+  const userId = parsePositiveInt(req.params.id, 'UserID');
+  const status = String(req.body.Status || '');
+  if (!['Active', 'Disabled'].includes(status)) return sendSafeError(res, 400, 'Status is invalid');
+  if (userId === req.session.userId && status === 'Disabled') return sendSafeError(res, 400, 'You cannot disable your own account');
+
+  const oldValue = await dbGet('SELECT UserID, Username, Role, EmployeeID, Status FROM Users WHERE UserID=?', [userId]);
+  if (!oldValue) return sendSafeError(res, 404, 'User not found');
+  await dbRun('UPDATE Users SET Status=? WHERE UserID=?', [status, userId]);
+  await auditLog(req, status === 'Disabled' ? 'DISABLE_USER' : 'ENABLE_USER', 'Users', userId, oldValue, { Status: status });
+  res.json({ success: true });
+});
+
+app.post('/api/users/:id/reset-password', requireAdmin, async (req, res) => {
+  const userId = parsePositiveInt(req.params.id, 'UserID');
+  const password = String(req.body.Password || '');
+  if (password.length < 8) return sendSafeError(res, 400, 'Password must be at least 8 characters');
+
+  const user = await dbGet('SELECT UserID, Username FROM Users WHERE UserID=?', [userId]);
+  if (!user) return sendSafeError(res, 404, 'User not found');
+  const hash = await bcrypt.hash(password, 12);
+  await dbRun('UPDATE Users SET PasswordHash=? WHERE UserID=?', [hash, userId]);
+  await auditLog(req, 'RESET_PASSWORD', 'Users', userId, { Username: user.Username }, { passwordReset: true });
+  res.json({ success: true });
+});
+
+app.get('/api/audit-logs', requireAdmin, async (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+  const rows = await dbAll(`
+    SELECT a.LogID, a.UserID, u.Username, a.Action, a.TableName, a.RecordID,
+           a.OldValue, a.NewValue, a.IPAddress, a.CreatedAt
+    FROM AuditLogs a
+    LEFT JOIN Users u ON a.UserID = u.UserID
+    ORDER BY a.LogID DESC
+    LIMIT ?
+  `, [limit]);
+  res.json({ data: rows, total: rows.length });
+});
+
+function parsePositiveInt(value, field) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) throw new Error(`${field} must be a positive integer`);
+  return n;
+}
+
+function parseMoney(value, field) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) throw new Error(`${field} must be a valid non-negative number`);
+  return n;
+}
+
+function parseDiscount(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n) || n < 0 || n > 1) throw new Error('Discount must be between 0 and 1');
+  return n;
+}
+
+function validateCustomerId(value) {
+  const id = String(value || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{3,10}$/.test(id)) throw new Error('CustomerID is invalid');
+  return id;
+}
+
+function validateOrderPayload(body) {
+  const item = Array.isArray(body.items) ? body.items[0] : body;
+  return {
+    CustomerID: validateCustomerId(body.CustomerID),
+    EmployeeID: body.EmployeeID ? parsePositiveInt(body.EmployeeID, 'EmployeeID') : null,
+    ShipVia: body.ShipVia ? parsePositiveInt(body.ShipVia, 'ShipVia') : 1,
+    Freight: body.Freight !== undefined ? parseMoney(body.Freight, 'Freight') : 0,
+    ShipName: String(body.ShipName || '').trim().slice(0, 255),
+    ShipAddress: String(body.ShipAddress || '').trim().slice(0, 255),
+    ShipCity: String(body.ShipCity || '').trim().slice(0, 100),
+    ShipRegion: String(body.ShipRegion || '').trim().slice(0, 100) || null,
+    ShipPostalCode: String(body.ShipPostalCode || '').trim().slice(0, 50),
+    ShipCountry: String(body.ShipCountry || '').trim().slice(0, 100),
+    ProductID: parsePositiveInt(item?.ProductID, 'ProductID'),
+    Quantity: parsePositiveInt(item?.Quantity, 'Quantity'),
+    UnitPrice: parseMoney(item?.UnitPrice, 'UnitPrice'),
+    Discount: parseDiscount(item?.Discount)
+  };
+}
 
 // â”€â”€ API: Thá»‘ng kĂª â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.get('/api/stats', requireAuth, async (req, res) => {
@@ -345,33 +552,182 @@ app.delete('/api/customers/:id', requireAdmin, async (req, res) => {
 
 // â”€â”€ API: ÄÆ¡n hĂ ng â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.get('/api/orders', requireAuth, async (req, res) => {
-  const page   = parseInt(req.query.page)  || 1;
-  const limit  = parseInt(req.query.limit) || 20;
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
   const offset = (page - 1) * limit;
+  const params = [];
+  const where = [];
+
+  if (isEmployeeSession(req)) {
+    where.push('o.EmployeeID = ?');
+    params.push(req.session.employeeId);
+  }
+
   try {
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const rows = await dbAll(`
-      SELECT o.OrderID, c.CompanyName as Customer,
-             e.FirstName || ' ' || e.LastName as Employee,
-             o.OrderDate, o.ShippedDate, o.Freight, o.ShipCountry
+      SELECT o.OrderID, o.CustomerID, c.CompanyName AS Customer,
+             o.EmployeeID, CONCAT(e.FirstName, ' ', e.LastName) AS Employee,
+             o.OrderDate, o.RequiredDate, o.ShippedDate, o.Freight,
+             o.ShipName, o.ShipCity, o.ShipCountry,
+             s.CompanyName AS Shipper,
+             COUNT(od.ProductID) AS ItemCount,
+             ROUND(SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)), 2) AS OrderTotal
       FROM Orders o
       LEFT JOIN Customers c ON o.CustomerID = c.CustomerID
       LEFT JOIN Employees e ON o.EmployeeID = e.EmployeeID
+      LEFT JOIN Shippers s ON o.ShipVia = s.ShipperID
+      LEFT JOIN [Order Details] od ON o.OrderID = od.OrderID
+      ${whereSql}
+      GROUP BY o.OrderID, o.CustomerID, c.CompanyName, o.EmployeeID, e.FirstName, e.LastName,
+               o.OrderDate, o.RequiredDate, o.ShippedDate, o.Freight, o.ShipName, o.ShipCity,
+               o.ShipCountry, s.CompanyName
       ORDER BY o.OrderID DESC LIMIT ? OFFSET ?
-    `, [limit, offset]);
-    const totalRow = await dbGet('SELECT COUNT(*) as n FROM Orders');
-    const total = totalRow?.n || 0;
-    res.json({ data: rows, total, page, limit });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    `, [...params, limit, offset]);
+    const totalRow = await dbGet(`SELECT COUNT(*) AS n FROM Orders o ${whereSql}`, params);
+    await auditLog(req, 'VIEW_ORDERS', 'Orders', null, null, { page, limit, role: req.session.role });
+    res.json({ data: rows, total: totalRow?.n || 0, page, limit });
+  } catch (err) {
+    console.error('View orders failed:', err.message);
+    sendSafeError(res, 500, 'Unable to load orders');
+  }
+});
+
+app.get('/api/orders/:id', requireAuth, async (req, res) => {
+  const orderId = parsePositiveInt(req.params.id, 'OrderID');
+  const params = [orderId];
+  const employeeClause = isEmployeeSession(req) ? 'AND o.EmployeeID = ?' : '';
+  if (isEmployeeSession(req)) params.push(req.session.employeeId);
+
+  const order = await dbGet(`
+    SELECT o.*, c.CompanyName AS Customer, CONCAT(e.FirstName, ' ', e.LastName) AS Employee,
+           s.CompanyName AS Shipper
+    FROM Orders o
+    LEFT JOIN Customers c ON o.CustomerID = c.CustomerID
+    LEFT JOIN Employees e ON o.EmployeeID = e.EmployeeID
+    LEFT JOIN Shippers s ON o.ShipVia = s.ShipperID
+    WHERE o.OrderID = ? ${employeeClause}
+  `, params);
+  if (!order) return sendSafeError(res, 404, 'Order not found');
+
+  const details = await dbAll(`
+    SELECT od.ProductID, p.ProductName, od.UnitPrice, od.Quantity, od.Discount,
+           p.UnitsInStock, p.IsVerified
+    FROM [Order Details] od
+    JOIN Products p ON od.ProductID = p.ProductID
+    WHERE od.OrderID = ?
+  `, [orderId]);
+  res.json({ ...order, details });
+});
+
+app.post('/api/orders', requireRole('Admin', 'Employee'), async (req, res) => {
+  let payload;
+  try {
+    payload = validateOrderPayload(req.body);
+  } catch (err) {
+    return sendSafeError(res, 400, err.message);
+  }
+
+  const employeeId = isAdminSession(req) ? (payload.EmployeeID || req.session.employeeId || 1) : req.session.employeeId;
+  if (!employeeId) return sendSafeError(res, 403, 'Employee account is not linked to an EmployeeID');
+
+  try {
+    const result = await withTransaction(async tx => {
+      const customer = await tx.get('SELECT CustomerID, CompanyName, Address, City, Region, PostalCode, Country FROM Customers WHERE CustomerID = ?', [payload.CustomerID]);
+      if (!customer) throw new Error('CustomerID does not exist');
+
+      const product = await tx.get('SELECT ProductID, ProductName, UnitPrice, UnitsInStock, IsVerified FROM Products WHERE ProductID = ? FOR UPDATE', [payload.ProductID]);
+      if (!product) throw new Error('ProductID does not exist');
+      if (Number(product.IsVerified) !== 1) throw new Error('Product is not verified');
+      if (Number(product.UnitsInStock) < payload.Quantity) throw new Error('Insufficient stock');
+
+      const orderInsert = await tx.run(`
+        INSERT INTO Orders (CustomerID, EmployeeID, OrderDate, RequiredDate, ShipVia, Freight,
+                            ShipName, ShipAddress, ShipCity, ShipRegion, ShipPostalCode, ShipCountry)
+        VALUES (?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 14 DAY), ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        payload.CustomerID, employeeId, payload.ShipVia, payload.Freight,
+        payload.ShipName || customer.CompanyName, payload.ShipAddress || customer.Address,
+        payload.ShipCity || customer.City, payload.ShipRegion || customer.Region,
+        payload.ShipPostalCode || customer.PostalCode, payload.ShipCountry || customer.Country
+      ]);
+      const orderId = orderInsert.insertId;
+
+      await tx.run(`INSERT INTO [Order Details] (OrderID, ProductID, UnitPrice, Quantity, Discount) VALUES (?, ?, ?, ?, ?)`,
+        [orderId, payload.ProductID, payload.UnitPrice, payload.Quantity, payload.Discount]);
+      await tx.run('UPDATE Products SET UnitsInStock = UnitsInStock - ? WHERE ProductID = ?', [payload.Quantity, payload.ProductID]);
+      return { orderId, product };
+    });
+
+    await auditLog(req, 'CREATE_ORDER', 'Orders', result.orderId, null, {
+      CustomerID: payload.CustomerID,
+      EmployeeID: employeeId,
+      ProductID: payload.ProductID,
+      Quantity: payload.Quantity,
+      UnitPrice: payload.UnitPrice,
+      Discount: payload.Discount
+    });
+    res.status(201).json({ success: true, orderId: result.orderId });
+  } catch (err) {
+    console.error('Create order failed:', err.message);
+    sendSafeError(res, 400, err.message);
+  }
+});
+
+app.put('/api/orders/:id', requireRole('Admin', 'Employee'), async (req, res) => {
+  const orderId = parsePositiveInt(req.params.id, 'OrderID');
+  let payload;
+  try {
+    payload = validateOrderPayload(req.body);
+  } catch (err) {
+    return sendSafeError(res, 400, err.message);
+  }
+
+  try {
+    await withTransaction(async tx => {
+      const order = await tx.get('SELECT * FROM Orders WHERE OrderID = ? FOR UPDATE', [orderId]);
+      if (!order) throw new Error('Order not found');
+      if (isEmployeeSession(req) && Number(order.EmployeeID) !== Number(req.session.employeeId)) throw new Error('Forbidden');
+      const customer = await tx.get('SELECT CustomerID FROM Customers WHERE CustomerID = ?', [payload.CustomerID]);
+      if (!customer) throw new Error('CustomerID does not exist');
+
+      const oldDetail = await tx.get('SELECT * FROM [Order Details] WHERE OrderID = ? ORDER BY ProductID LIMIT 1 FOR UPDATE', [orderId]);
+      if (!oldDetail) throw new Error('Order detail not found');
+
+      await tx.run('UPDATE Products SET UnitsInStock = UnitsInStock + ? WHERE ProductID = ?', [oldDetail.Quantity, oldDetail.ProductID]);
+      const product = await tx.get('SELECT ProductID, ProductName, UnitsInStock, IsVerified FROM Products WHERE ProductID = ? FOR UPDATE', [payload.ProductID]);
+      if (!product) throw new Error('ProductID does not exist');
+      if (Number(product.IsVerified) !== 1) throw new Error('Product is not verified');
+      if (Number(product.UnitsInStock) < payload.Quantity) throw new Error('Insufficient stock');
+
+      await tx.run(`
+        UPDATE Orders
+        SET CustomerID=?, ShipVia=?, Freight=?, ShipName=?, ShipAddress=?, ShipCity=?, ShipRegion=?, ShipPostalCode=?, ShipCountry=?
+        WHERE OrderID=?
+      `, [payload.CustomerID, payload.ShipVia, payload.Freight, payload.ShipName, payload.ShipAddress,
+          payload.ShipCity, payload.ShipRegion, payload.ShipPostalCode, payload.ShipCountry, orderId]);
+      await tx.run('DELETE FROM [Order Details] WHERE OrderID = ?', [orderId]);
+      await tx.run('INSERT INTO [Order Details] (OrderID, ProductID, UnitPrice, Quantity, Discount) VALUES (?, ?, ?, ?, ?)',
+        [orderId, payload.ProductID, payload.UnitPrice, payload.Quantity, payload.Discount]);
+      await tx.run('UPDATE Products SET UnitsInStock = UnitsInStock - ? WHERE ProductID = ?', [payload.Quantity, payload.ProductID]);
+
+      await auditLog(req, 'EDIT_ORDER', 'Orders', orderId, { order, detail: oldDetail }, payload);
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Edit order failed:', err.message);
+    sendSafeError(res, err.message === 'Forbidden' ? 403 : 400, err.message);
+  }
 });
 
 app.delete('/api/orders/:id', requireAdmin, async (req, res) => {
   try {
-    await dbRun('DELETE FROM [Order Details] WHERE OrderID=?', [req.params.id]);
-    await dbRun('DELETE FROM Orders WHERE OrderID=?', [req.params.id]);
+    const orderId = parsePositiveInt(req.params.id, 'OrderID');
+    await dbRun('DELETE FROM [Order Details] WHERE OrderID=?', [orderId]);
+    await dbRun('DELETE FROM Orders WHERE OrderID=?', [orderId]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-
 // â”€â”€ API: Sáº£n pháº©m â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.get('/api/products', requireAuth, async (req, res) => {
   const page   = parseInt(req.query.page)  || 1;
@@ -383,7 +739,7 @@ app.get('/api/products', requireAuth, async (req, res) => {
     const searchParams = search ? [`%${search}%`] : [];
     const rows = await dbAll(`
       SELECT p.ProductID, p.ProductName, c.CategoryName,
-             s.CompanyName as Supplier, p.UnitPrice, p.UnitsInStock, p.Discontinued
+             s.CompanyName as Supplier, p.UnitPrice, p.UnitsInStock, p.Discontinued, p.IsVerified
       FROM Products p
       LEFT JOIN Categories c ON p.CategoryID = c.CategoryID
       LEFT JOIN Suppliers  s ON p.SupplierID = s.SupplierID
@@ -396,18 +752,31 @@ app.get('/api/products', requireAuth, async (req, res) => {
 });
 
 app.get('/api/products/:id', requireAdmin, async (req, res) => {
-  const row = await dbGet('SELECT ProductID, ProductName, SupplierID, CategoryID, UnitPrice, UnitsInStock, UnitsOnOrder, ReorderLevel, Discontinued FROM Products WHERE ProductID=?', [req.params.id]);
+  const row = await dbGet('SELECT ProductID, ProductName, SupplierID, CategoryID, UnitPrice, UnitsInStock, UnitsOnOrder, ReorderLevel, Discontinued, IsVerified FROM Products WHERE ProductID=?', [req.params.id]);
   if (!row) return res.status(404).json({ error: 'KhĂ´ng tĂ¬m tháº¥y' });
   res.json(row);
 });
 
 app.put('/api/products/:id', requireAdmin, async (req, res) => {
-  const { ProductName, UnitPrice, UnitsInStock, UnitsOnOrder, ReorderLevel, Discontinued } = req.body;
+  const { ProductName, UnitPrice, UnitsInStock, UnitsOnOrder, ReorderLevel, Discontinued, IsVerified } = req.body;
   try {
-    await dbRun(`UPDATE Products SET ProductName=?, UnitPrice=?, UnitsInStock=?, UnitsOnOrder=?, ReorderLevel=?, Discontinued=? WHERE ProductID=?`,
-      [ProductName, UnitPrice, UnitsInStock, UnitsOnOrder, ReorderLevel, Discontinued, req.params.id]);
+    const oldValue = await dbGet('SELECT ProductID, ProductName, UnitPrice, UnitsInStock, UnitsOnOrder, ReorderLevel, Discontinued, IsVerified FROM Products WHERE ProductID=?', [req.params.id]);
+    const verifiedValue = IsVerified === undefined ? Number(oldValue?.IsVerified || 0) : (IsVerified === true || IsVerified === 1 || IsVerified === '1' ? 1 : 0);
+    await dbRun(`UPDATE Products SET ProductName=?, UnitPrice=?, UnitsInStock=?, UnitsOnOrder=?, ReorderLevel=?, Discontinued=?, IsVerified=? WHERE ProductID=?`,
+      [ProductName, UnitPrice, UnitsInStock, UnitsOnOrder, ReorderLevel, Discontinued, verifiedValue, req.params.id]);
+    await auditLog(req, 'EDIT_PRODUCT', 'Products', req.params.id, oldValue, { ProductName, UnitPrice, UnitsInStock, UnitsOnOrder, ReorderLevel, Discontinued, IsVerified: verifiedValue });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/products/:id/verification', requireAdmin, async (req, res) => {
+  const productId = parsePositiveInt(req.params.id, 'ProductID');
+  const isVerified = req.body.IsVerified === true || req.body.IsVerified === 1 || req.body.IsVerified === '1';
+  const oldValue = await dbGet('SELECT ProductID, ProductName, IsVerified FROM Products WHERE ProductID=?', [productId]);
+  if (!oldValue) return sendSafeError(res, 404, 'Product not found');
+  await dbRun('UPDATE Products SET IsVerified=? WHERE ProductID=?', [isVerified ? 1 : 0, productId]);
+  await auditLog(req, 'VERIFY_PRODUCT', 'Products', productId, oldValue, { IsVerified: isVerified ? 1 : 0 });
+  res.json({ success: true });
 });
 
 app.delete('/api/products/:id', requireAdmin, async (req, res) => {
